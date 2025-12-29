@@ -1,0 +1,21 @@
+input_dir: 
+output_dir: 
+interval: 14
+prefix: rs25berries_samp0_
+start_number: 0
+limit: null
+crop_area:
+- 0
+- 180
+- 640
+- 640
+resize_to:
+  width: 640
+  height: null
+color_space: BGR
+ext: png
+use_datetime_token: true
+datetime_format: '%Y%m%d_%H%M%S'
+parallel_workers: 6
+verbose: true
+progress: true

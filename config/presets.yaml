@@ -1,0 +1,21 @@
+presets:
+  - name: every_30_resize_720p
+    description: "Extract every 30th frame resized to 1280x720"
+    interval: 30
+    resize_to:
+      width: 1280
+      height: 720
+  - name: every_60_gray
+    description: "Every 60th frame, grayscale"
+    interval: 60
+    color_space: GRAY
+  - name: dense_1080p
+    description: "Every frame resized to 1920x1080"
+    interval: 1
+    resize_to:
+      width: 1920
+      height: 1080
+  - name: preview_fast
+    description: "Quick preview: every 120th frame, limit 50"
+    interval: 120
+    limit: 50
