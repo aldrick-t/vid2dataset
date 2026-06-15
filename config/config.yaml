@@ -1,21 +1,19 @@
-input_dir: 
-output_dir: 
-interval: 14
-prefix: rs25berries_samp0_
+input_dir: /Users/aldricktadeo/Downloads/IMG_7515.MOV
+output_dir: /Users/aldricktadeo/Documents/Code/custom-tools/vision_dataset_manip/vid2dataset/output
+interval: 8
+prefix: rs26berries_mar11_3
 start_number: 0
 limit: null
 crop_area:
 - 0
-- 180
-- 640
-- 640
-resize_to:
-  width: 640
-  height: null
+- 376
+- 1080
+- 1080
+resize_to: null
 color_space: BGR
 ext: png
 use_datetime_token: true
 datetime_format: '%Y%m%d_%H%M%S'
-parallel_workers: 6
+parallel_workers: 12
 verbose: true
 progress: true

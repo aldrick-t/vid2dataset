@@ -31,6 +31,7 @@ CONFIG_DIR = BASE_DIR / "config"
 CONFIG_PATH = CONFIG_DIR / "config.yaml"
 PRESETS_PATH = CONFIG_DIR / "presets.yaml"
 PROFILES_DIR = CONFIG_DIR / "profiles"
+PROFILE_EXCLUDED_KEYS = {"input_dir", "output_dir", "prefix"}
 
 
 DEFAULT_CONFIG: Dict[str, Any] = {
@@ -79,6 +80,10 @@ def resolve_dir(path_str: str) -> Path:
 	if not path.is_absolute():
 		path = (BASE_DIR / path).resolve()
 	return path
+
+
+def strip_profile_fields(cfg: Dict[str, Any]) -> Dict[str, Any]:
+	return {k: v for k, v in cfg.items() if k not in PROFILE_EXCLUDED_KEYS}
 
 
 def build_options(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -378,15 +383,12 @@ class OverrideDialog(QtWidgets.QDialog):
 				self.crop.setText(
 					",".join(str(x) for x in existing.get("crop_area"))
 				)
-			if existing.get("resize_to"):
-				self.resize_to.setText(
-					",".join(
-						[
-							str(existing["resize_to"]["width"]),
-							str(existing["resize_to"]["height"]),
-						]
-					)
-				)
+			resize_cfg = existing.get("resize_to")
+			if resize_cfg:
+				_rw = resize_cfg.get("width")
+				_rh = resize_cfg.get("height")
+				if _rw is not None and _rh is not None:
+					self.resize_to.setText(f"{int(_rw)},{int(_rh)}")
 			if existing.get("color_space"):
 				idx = self.color_space.findText(existing["color_space"], QtCore.Qt.MatchFixedString)
 				if idx >= 0:
@@ -806,13 +808,17 @@ class MainWindow(QtWidgets.QMainWindow):
 			parts = [int(x) for x in self.crop.text().split(",")]
 			if len(parts) == 4:
 				cfg["crop_area"] = parts
+		def _parse_optional_int(raw):
+			s = str(raw).strip() if raw is not None else ""
+			if not s or s.lower() in {"none", "null"}:
+				return None
+			return int(s)
 		if "," in self.resize_to.text():
 			parts_raw = self.resize_to.text().split(",")
 			if len(parts_raw) == 2:
-				w_raw, h_raw = parts_raw[0].strip(), parts_raw[1].strip()
-				w_val = int(w_raw) if w_raw else None
-				h_val = int(h_raw) if h_raw else None
-				if w_val or h_val:
+				w_val = _parse_optional_int(parts_raw[0])
+				h_val = _parse_optional_int(parts_raw[1])
+				if w_val is not None and h_val is not None:
 					cfg["resize_to"] = {"width": w_val, "height": h_val}
 		return cfg
 
@@ -820,7 +826,7 @@ class MainWindow(QtWidgets.QMainWindow):
 		profiles: Dict[str, Dict[str, Any]] = {}
 		if PROFILES_DIR.exists():
 			for path in PROFILES_DIR.glob("*.yaml"):
-				profiles[path.stem] = load_yaml(path, DEFAULT_CONFIG)
+				profiles[path.stem] = strip_profile_fields(load_yaml(path, {}))
 		return profiles
 
 	def _update_profiles_ui(self) -> None:
@@ -833,7 +839,8 @@ class MainWindow(QtWidgets.QMainWindow):
 			return
 		cfg = self._profiles.get(name)
 		if cfg:
-			self._config = merge_overrides(DEFAULT_CONFIG, cfg)
+			base = load_yaml(CONFIG_PATH, DEFAULT_CONFIG)
+			self._config = merge_overrides(base, strip_profile_fields(cfg))
 			self._apply_config_to_form()
 			self._log(f"Loaded profile {name}")
 
@@ -841,7 +848,7 @@ class MainWindow(QtWidgets.QMainWindow):
 		name, ok = QtWidgets.QInputDialog.getText(self, "Save profile", "Profile name")
 		if not ok or not name.strip():
 			return
-		cfg = self._collect_form_config()
+		cfg = strip_profile_fields(self._collect_form_config())
 		path = PROFILES_DIR / f"{name.strip()}.yaml"
 		save_yaml(path, cfg)
 		self._profiles[name.strip()] = cfg

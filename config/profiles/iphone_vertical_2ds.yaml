@@ -1,7 +1,4 @@
-input_dir: 
-output_dir: 
 interval: 8
-prefix: 
 start_number: 0
 limit: null
 crop_area:

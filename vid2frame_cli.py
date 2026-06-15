@@ -31,6 +31,8 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_DIR = BASE_DIR / "config"
 CONFIG_PATH = CONFIG_DIR / "config.yaml"
 PRESETS_PATH = CONFIG_DIR / "presets.yaml"
+PROFILES_DIR = CONFIG_DIR / "profiles"
+PROFILE_EXCLUDED_KEYS = {"input_dir", "output_dir", "prefix"}
 
 DEFAULT_CONFIG: Dict[str, Any] = {
 	"input_dir": "input",
@@ -80,10 +82,43 @@ DEFAULT_PRESETS: List[Dict[str, Any]] = [
 
 def ensure_files() -> None:
 	CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+	PROFILES_DIR.mkdir(parents=True, exist_ok=True)
 	if not CONFIG_PATH.exists():
 		save_yaml(CONFIG_PATH, DEFAULT_CONFIG)
 	if not PRESETS_PATH.exists():
 		save_yaml(PRESETS_PATH, {"presets": DEFAULT_PRESETS})
+
+
+def strip_profile_fields(cfg: Dict[str, Any]) -> Dict[str, Any]:
+	return {k: v for k, v in cfg.items() if k not in PROFILE_EXCLUDED_KEYS}
+
+
+def load_profiles() -> Dict[str, Dict[str, Any]]:
+	profiles: Dict[str, Dict[str, Any]] = {}
+	if PROFILES_DIR.exists():
+		for path in PROFILES_DIR.glob("*.yaml"):
+			profiles[path.stem] = strip_profile_fields(load_yaml(path, {}))
+	return profiles
+
+
+def merge_profile(base_config: Dict[str, Any], profile_data: Dict[str, Any]) -> Dict[str, Any]:
+	merged = {**base_config}
+	merged.update(strip_profile_fields(profile_data))
+	return merged
+
+
+def choose_profile_name(profiles: Dict[str, Dict[str, Any]]) -> Optional[str]:
+	if not profiles:
+		print("No profiles found.")
+		return None
+	print("\nAvailable profiles:")
+	for idx, name in enumerate(sorted(profiles.keys()), start=1):
+		print(f"{idx}) {name}")
+	choice = prompt_int("Select profile number", None, allow_none=True)
+	if choice is None or choice < 1 or choice > len(profiles):
+		return None
+	names = sorted(profiles.keys())
+	return names[choice - 1]
 
 
 def load_yaml(path: Path, default: Any) -> Any:
@@ -126,14 +161,18 @@ def delete_output_folder(config: Dict[str, Any]) -> None:
 		print(f"Failed to delete output folder: {exc}")
 
 
-def print_menu() -> None:
-	print("\nvid2frame CLI")
+def print_menu(active_profile: Optional[str]) -> None:
+	profile_label = active_profile or "default"
+	print(f"\nvid2frame CLI (profile: {profile_label})")
 	print("1) Single video")
 	print("2) Batch folder")
-	print("3) Edit settings")
-	print("4) Apply preset")
-	print("5) Delete output folder")
-	print("6) Exit")
+	print("3) Edit default settings")
+	print("4) Load profile")
+	print("5) Save current as profile")
+	print("6) Delete profile")
+	print("7) Apply preset")
+	print("8) Delete output folder")
+	print("9) Exit")
 
 
 def prompt(text: str, default: Optional[str] = None) -> str:
@@ -408,30 +447,63 @@ def summarize_reports(reports: List[Dict[str, Any]]) -> None:
 
 def main() -> None:
 	ensure_files()
-	config = load_yaml(CONFIG_PATH, DEFAULT_CONFIG)
+	base_config = load_yaml(CONFIG_PATH, DEFAULT_CONFIG)
+	profiles = load_profiles()
+	active_profile: Optional[str] = None
+	config = base_config
 	presets_data = load_yaml(PRESETS_PATH, {"presets": DEFAULT_PRESETS})
 	presets = presets_data.get("presets", [])
 
 	while True:
-		print_menu()
+		print_menu(active_profile)
 		choice = prompt("Choose an option", "1")
 		if choice == "1":
 			run_single(config)
 		elif choice == "2":
 			run_batch(config)
 		elif choice == "3":
-			config = edit_settings(config)
-			save_yaml(CONFIG_PATH, config)
-			print("Settings saved.")
+			base_config = edit_settings(base_config)
+			save_yaml(CONFIG_PATH, base_config)
+			config = merge_profile(base_config, profiles.get(active_profile, {}))
+			print("Default settings saved.")
 		elif choice == "4":
+			name = choose_profile_name(profiles)
+			if name:
+				config = merge_profile(base_config, profiles.get(name, {}))
+				active_profile = name
+				print(f"Loaded profile: {name}")
+		elif choice == "5":
+			name = prompt("Profile name to save", active_profile or "").strip()
+			if not name:
+				print("Profile name required.")
+				continue
+			data = strip_profile_fields(config)
+			save_yaml(PROFILES_DIR / f"{name}.yaml", data)
+			profiles[name] = data
+			active_profile = name
+			print(f"Saved profile: {name}")
+		elif choice == "6":
+			name = choose_profile_name(profiles)
+			if name:
+				path = PROFILES_DIR / f"{name}.yaml"
+				if path.exists():
+					path.unlink()
+				profiles.pop(name, None)
+				if active_profile == name:
+					active_profile = None
+					config = base_config
+				print(f"Deleted profile: {name}")
+		elif choice == "7":
 			preset = select_preset(presets)
 			if preset:
 				config = apply_preset(config, preset)
-				save_yaml(CONFIG_PATH, config)
+				if active_profile is None:
+					base_config = config
+					save_yaml(CONFIG_PATH, base_config)
 				print(f"Applied preset: {preset.get('name')}")
-		elif choice == "5":
+		elif choice == "8":
 			delete_output_folder(config)
-		elif choice == "6":
+		elif choice == "9":
 			print("Goodbye.")
 			break
 		else:
