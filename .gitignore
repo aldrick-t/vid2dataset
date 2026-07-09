@@ -54,3 +54,4 @@ apps/desktop/dist/
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/ffmpeg/bin/*
 !apps/desktop/src-tauri/ffmpeg/bin/.gitkeep
+apps/desktop/src-tauri/ffmpeg/THIRD_PARTY_FFMPEG.txt
