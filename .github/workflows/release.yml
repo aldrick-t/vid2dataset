@@ -1,0 +1,242 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to release"
+        required: true
+        default: "v0.2.0-alpha.2"
+      release_name:
+        description: "GitHub release title"
+        required: true
+        default: "vid2dataset2 Alpha 2"
+      prerelease:
+        description: "Mark the GitHub release as a prerelease"
+        type: boolean
+        required: true
+        default: true
+      draft:
+        description: "Create the GitHub release as a draft"
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - run: cargo fmt --all --check
+
+      - run: cargo test --workspace --all-targets
+
+      - working-directory: apps/desktop
+        run: npm ci
+
+      - working-directory: apps/desktop
+        run: npm run build
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            os: macos-latest
+            tauri_args: "--target aarch64-apple-darwin"
+            rust_targets: "aarch64-apple-darwin"
+            ffmpeg_key: "MACOS_ARM64"
+          - name: macos-x64
+            os: macos-latest
+            tauri_args: "--target x86_64-apple-darwin"
+            rust_targets: "x86_64-apple-darwin"
+            ffmpeg_key: "MACOS_X64"
+          - name: windows-x64
+            os: windows-latest
+            tauri_args: ""
+            rust_targets: ""
+            ffmpeg_key: "WINDOWS_X64"
+          - name: linux-x64
+            os: ubuntu-22.04
+            tauri_args: ""
+            rust_targets: ""
+            ffmpeg_key: "LINUX_X64"
+    env:
+      VID2DATASET_RELEASE_FFMPEG_ARCHIVE_URL: ${{ vars[format('VID2DATASET_FFMPEG_{0}_URL', matrix.ffmpeg_key)] }}
+      VID2DATASET_RELEASE_FFMPEG_SHA256: ${{ vars[format('VID2DATASET_FFMPEG_{0}_SHA256', matrix.ffmpeg_key)] }}
+      VID2DATASET_RELEASE_FFMPEG_SOURCE_URL: ${{ vars[format('VID2DATASET_FFMPEG_{0}_SOURCE_URL', matrix.ffmpeg_key)] }}
+      VID2DATASET_RELEASE_FFMPEG_LICENSE_URL: ${{ vars[format('VID2DATASET_FFMPEG_{0}_LICENSE_URL', matrix.ffmpeg_key)] }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux Tauri dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: Install Rust stable with target
+        if: matrix.rust_targets != ''
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Install Rust stable
+        if: matrix.rust_targets == ''
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Import Apple signing certificate
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          if [[ -z "${APPLE_CERTIFICATE:-}" ]]; then
+            echo "APPLE_CERTIFICATE is not configured; building unsigned macOS artifacts."
+            exit 0
+          fi
+          if [[ -z "${APPLE_CERTIFICATE_PASSWORD:-}" || -z "${KEYCHAIN_PASSWORD:-}" ]]; then
+            echo "APPLE_CERTIFICATE_PASSWORD and KEYCHAIN_PASSWORD are required when APPLE_CERTIFICATE is set." >&2
+            exit 1
+          fi
+
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+
+          CERT_ID="$(security find-identity -v -p codesigning build.keychain | awk -F'"' '/Developer ID Application|Apple Distribution|Apple Development/ {print $2; exit}')"
+          if [[ -z "$CERT_ID" ]]; then
+            echo "No usable Apple code-signing identity found in build keychain." >&2
+            exit 1
+          fi
+          echo "APPLE_SIGNING_IDENTITY=$CERT_ID" >> "$GITHUB_ENV"
+
+      - name: Stage release FFmpeg
+        shell: bash
+        run: scripts/stage-release-ffmpeg.sh
+
+      - name: Build Tauri bundles
+        shell: bash
+        working-directory: apps/desktop
+        run: |
+          if [[ -n "${TAURI_ARGS:-}" ]]; then
+            npm run tauri build -- $TAURI_ARGS
+          else
+            npm run tauri build
+          fi
+        env:
+          TAURI_ARGS: ${{ matrix.tauri_args }}
+
+      - name: Sign Windows artifacts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE) {
+            Write-Host "WINDOWS_CERTIFICATE is not configured; building unsigned Windows artifacts."
+            exit 0
+          }
+          if (-not $env:WINDOWS_CERTIFICATE_PASSWORD) {
+            Write-Error "WINDOWS_CERTIFICATE_PASSWORD is required when WINDOWS_CERTIFICATE is set."
+            exit 1
+          }
+
+          $certPath = Join-Path $env:RUNNER_TEMP "vid2dataset-signing.pfx"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $signtool) {
+            Write-Error "signtool.exe was not found on the Windows runner."
+            exit 1
+          }
+
+          $artifacts = Get-ChildItem "target\release\bundle" -Recurse -Include *.exe,*.msi -File
+          if (-not $artifacts) {
+            Write-Error "No Windows artifacts were found to sign."
+            exit 1
+          }
+
+          foreach ($artifact in $artifacts) {
+            & $signtool.FullName sign /f $certPath /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $artifact.FullName
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          }
+
+      - name: Collect artifacts and checksums
+        shell: bash
+        run: scripts/archive-release-artifacts.sh "${{ matrix.name }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vid2dataset2-${{ matrix.name }}
+          path: dist/release/${{ matrix.name }}/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/release-artifacts
+
+      - name: Write combined checksums
+        run: |
+          cd dist/release-artifacts
+          find . -type f ! -name 'SHA256SUMS*' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_name || format('vid2dataset2 {0}', github.ref_name) }}
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          files: |
+            dist/release-artifacts/**/*
+          body_path: docs/release.md

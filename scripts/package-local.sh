@@ -16,4 +16,4 @@ cd "$ROOT_DIR/apps/desktop"
 npm ci
 npm run tauri build
 
-echo "Local packages are under apps/desktop/src-tauri/target/release/bundle"
+echo "Local packages are under target/release/bundle"
