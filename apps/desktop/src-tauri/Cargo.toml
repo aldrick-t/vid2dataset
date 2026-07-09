@@ -1,6 +1,6 @@
 [package]
 name = "vid2dataset-desktop"
-version = "0.2.0"
+version = "0.2.0-alpha.2"
 description = "Cross-platform GUI for vid2dataset"
 edition.workspace = true
 license.workspace = true

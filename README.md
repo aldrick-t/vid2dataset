@@ -4,7 +4,12 @@
 
 The previous Python/OpenCV/PySide implementation is preserved in [`legacy/`](legacy/) for reference and migration.
 
-## Current v2 Status
+## Current vid2dataset2 Status
+
+`vid2dataset` remains the app and binary name. `vid2dataset2` is the Rust +
+Tauri revamp release train. The current revamp milestone is
+`vid2dataset2 Alpha 2`, with machine version `0.2.0-alpha.2` and release tag
+`v0.2.0-alpha.2`.
 
 - Rust workspace scaffolded with `vid2dataset-core` and `vid2dataset` CLI crates.
 - Tauri + React desktop app skeleton with guided and advanced extraction controls.
@@ -16,7 +21,8 @@ The previous Python/OpenCV/PySide implementation is preserved in [`legacy/`](leg
 
 ## Current Status
 
-This repository is a functional v1 scaffold, not a signed production release.
+This repository is a functional vid2dataset2 alpha, not a signed stable
+production release.
 
 Implemented:
 
@@ -28,12 +34,13 @@ Implemented:
 - Video preview with scrubber, time seek, frame seek, drag-to-create crop, crop move/resize, and explicit crop/no-crop confirmation.
 - Legacy Python implementation preserved under [`legacy/`](legacy/).
 
-Still deferred:
+Still deferred beyond the current alpha:
 
-- Signed/notarized public installers.
-- Automated public FFmpeg binary distribution.
 - Hosted web/server backend.
 - COCO/YOLO annotation exports.
+
+The release flow for signed/notarized public installers and automated bundled
+FFmpeg staging is documented in [`docs/release.md`](docs/release.md).
 
 ## Development Requirements
 
@@ -175,7 +182,12 @@ If `ffmpeg` and `ffprobe` are already on `PATH`, run:
 scripts/setup-ffmpeg.sh
 ```
 
-The script validates both tools with `-version`, copies them into the Tauri resource path, and keeps them gitignored. Installed desktop apps should not require end users to install FFmpeg separately when release packaging has staged the binaries first.
+The script validates both tools with `-version`, copies them into the Tauri
+resource path, and keeps them gitignored. Installed desktop apps should not
+require end users to install FFmpeg separately when release packaging has staged
+the binaries first. Bundled FFmpeg stays inside the app package/resource
+directory; it is not installed globally, does not mutate PATH, and is not
+downloaded on first run.
 
 ## Desktop vs Web
 
@@ -214,4 +226,4 @@ scripts/setup-ffmpeg.sh
 scripts/package-local.sh
 ```
 
-or use system FFmpeg/env var overrides at runtime instead of staging for source/development builds. Public release packaging should stage redistributable LGPL-compatible binaries; first-run auto-download is intentionally deferred.
+or use system FFmpeg/env var overrides at runtime instead of staging for source/development builds. Public release packaging stages redistributable LGPL-compatible binaries with checksum verification through [`scripts/stage-release-ffmpeg.sh`](scripts/stage-release-ffmpeg.sh); first-run auto-download is intentionally deferred.
