@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/vid2dataset-core",
+  "crates/vid2dataset-cli",
+  "apps/desktop/src-tauri",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://example.invalid/vid2dataset"
+rust-version = "1.78"
+
