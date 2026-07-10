@@ -48,6 +48,9 @@ jobs:
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
 
+      - name: Validate locked FFmpeg dependency
+        run: node scripts/ffmpeg-dependency.mjs validate-lock --lock .github/ffmpeg.lock.json --require-ready
+
       - run: cargo fmt --all --check
 
       - run: cargo test --workspace --all-targets
@@ -67,30 +70,22 @@ jobs:
       matrix:
         include:
           - name: macos-arm64
-            os: macos-latest
+            os: macos-15
             tauri_args: "--target aarch64-apple-darwin"
             rust_targets: "aarch64-apple-darwin"
-            ffmpeg_key: "MACOS_ARM64"
           - name: macos-x64
-            os: macos-latest
+            os: macos-15-intel
             tauri_args: "--target x86_64-apple-darwin"
             rust_targets: "x86_64-apple-darwin"
-            ffmpeg_key: "MACOS_X64"
           - name: windows-x64
-            os: windows-latest
+            os: windows-2022
             tauri_args: ""
             rust_targets: ""
-            ffmpeg_key: "WINDOWS_X64"
           - name: linux-x64
             os: ubuntu-22.04
             tauri_args: ""
             rust_targets: ""
-            ffmpeg_key: "LINUX_X64"
     env:
-      VID2DATASET_RELEASE_FFMPEG_ARCHIVE_URL: ${{ vars[format('VID2DATASET_FFMPEG_{0}_URL', matrix.ffmpeg_key)] }}
-      VID2DATASET_RELEASE_FFMPEG_SHA256: ${{ vars[format('VID2DATASET_FFMPEG_{0}_SHA256', matrix.ffmpeg_key)] }}
-      VID2DATASET_RELEASE_FFMPEG_SOURCE_URL: ${{ vars[format('VID2DATASET_FFMPEG_{0}_SOURCE_URL', matrix.ffmpeg_key)] }}
-      VID2DATASET_RELEASE_FFMPEG_LICENSE_URL: ${{ vars[format('VID2DATASET_FFMPEG_{0}_LICENSE_URL', matrix.ffmpeg_key)] }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -158,7 +153,33 @@ jobs:
 
       - name: Stage release FFmpeg
         shell: bash
-        run: scripts/stage-release-ffmpeg.sh
+        run: scripts/stage-release-ffmpeg.sh --target "${{ matrix.name }}"
+
+      - name: Sign staged macOS media tools
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
+          SIGNING_ARGS=(--force --sign "$SIGNING_IDENTITY")
+          if [[ "$SIGNING_IDENTITY" != "-" ]]; then
+            SIGNING_ARGS+=(--timestamp --options runtime)
+          fi
+          for tool in apps/desktop/src-tauri/ffmpeg/bin/ffmpeg apps/desktop/src-tauri/ffmpeg/bin/ffprobe; do
+            codesign "${SIGNING_ARGS[@]}" "$tool"
+            codesign --verify --strict "$tool"
+          done
+
+      - name: Validate bundled media tools
+        shell: bash
+        run: |
+          REPORT="$(cargo run -q -p vid2dataset -- doctor)"
+          echo "$REPORT"
+          if [[ "$(grep -c bundled <<<"$REPORT")" -lt 2 ]]; then
+            echo "doctor did not report both tools as bundled" >&2
+            exit 1
+          fi
+          export PATH="$GITHUB_WORKSPACE/apps/desktop/src-tauri/ffmpeg/bin:$PATH"
+          cargo test -p vid2dataset-core --test extraction extracts_synthetic_video_and_writes_manifests_when_ffmpeg_exists
 
       - name: Build Tauri bundles
         shell: bash

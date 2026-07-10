@@ -189,6 +189,12 @@ the binaries first. Bundled FFmpeg stays inside the app package/resource
 directory; it is not installed globally, does not mutate PATH, and is not
 downloaded on first run.
 
+Public builds do not use manually maintained GitHub variables. The reviewed
+dependency record lives in [`.github/ffmpeg.lock.json`](.github/ffmpeg.lock.json),
+and the quarterly/manual dependency workflow builds FFmpeg and ffprobe from
+verified official source for every release target. See
+[`docs/release.md`](docs/release.md) for first-bootstrap and update procedures.
+
 ## Desktop vs Web
 
 The React/Vite UI can run in a browser during development. A browser-only app cannot fully process large local videos with FFmpeg because it lacks native process and broad filesystem access.
@@ -226,4 +232,4 @@ scripts/setup-ffmpeg.sh
 scripts/package-local.sh
 ```
 
-or use system FFmpeg/env var overrides at runtime instead of staging for source/development builds. Public release packaging stages redistributable LGPL-compatible binaries with checksum verification through [`scripts/stage-release-ffmpeg.sh`](scripts/stage-release-ffmpeg.sh); first-run auto-download is intentionally deferred.
+or use system FFmpeg/env var overrides at runtime instead of staging for source/development builds. Public release packaging stages locked LGPL-compatible binaries with checksum verification through [`scripts/stage-release-ffmpeg.sh`](scripts/stage-release-ffmpeg.sh); the application never performs a first-run download.

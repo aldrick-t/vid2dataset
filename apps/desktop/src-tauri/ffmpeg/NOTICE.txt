@@ -4,6 +4,8 @@ Public vid2dataset2 desktop builds bundle redistributable FFmpeg and ffprobe
 binaries as application resources. These tools are not installed globally, are
 not added to PATH, and are not downloaded on first run.
 
-Release automation must stage LGPL-compatible FFmpeg builds and include the
-archive URL, source URL, license URL, and checksum in the generated
-THIRD_PARTY_FFMPEG.txt resource for that build.
+Release automation builds LGPL-compatible FFmpeg and statically linked zlib from
+verified official sources. The reviewed lock manifest supplies immutable binary
+and source URLs, licenses, signing fingerprints, and checksums. Packaging copies
+the full licenses and generated THIRD_PARTY_FFMPEG.txt provenance resource into
+the application.

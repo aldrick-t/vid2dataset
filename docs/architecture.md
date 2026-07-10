@@ -21,7 +21,11 @@ Discovery order:
 3. Bundled binaries next to the app under `ffmpeg/bin/`.
 4. System `PATH`.
 
-Bundled builds should be LGPL-friendly by default. Advanced users can override with their own system FFmpeg when they need custom codec support.
+Public bundles are built from signed official FFmpeg source with GPL/nonfree
+components disabled and a pinned static zlib dependency. Immutable target URLs,
+source provenance, licenses, and checksums live in `.github/ffmpeg.lock.json` and
+are updated through reviewed automation PRs. Advanced users can still override
+the bundled tools with their own FFmpeg when they need a custom build.
 
 ## Transform Order
 

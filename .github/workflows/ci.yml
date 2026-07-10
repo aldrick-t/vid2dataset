@@ -36,3 +36,15 @@ jobs:
         run: npm ci
       - working-directory: apps/desktop
         run: npm run build
+
+  release-automation:
+    name: Release automation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test scripts/tests/ffmpeg-dependency.test.mjs
+      - run: node scripts/ffmpeg-dependency.mjs validate-lock --lock .github/ffmpeg.lock.json
+      - run: bash -n scripts/verify-release-sources.sh scripts/build-release-ffmpeg.sh scripts/stage-release-ffmpeg.sh

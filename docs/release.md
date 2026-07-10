@@ -54,7 +54,11 @@ workflow uploads per-platform `SHA256SUMS-<platform>` files and a combined
 ## FFmpeg Portability Policy
 
 Public desktop builds must bundle redistributable LGPL-compatible `ffmpeg` and
-`ffprobe` binaries as Tauri app resources under `ffmpeg/bin/`.
+`ffprobe` binaries as Tauri app resources under `ffmpeg/bin/`. The project builds
+these tools from cryptographically verified official FFmpeg source with pinned,
+statically linked zlib for PNG output. GPL and nonfree FFmpeg components are
+disabled; the built-in H.264, HEVC, AV1, VP9, MPEG-4, PNG, and JPEG support used
+by vid2dataset remains enabled.
 
 Bundled FFmpeg must not:
 
@@ -85,28 +89,43 @@ It runs on pushed `v*` tags and can also be started manually with:
 - `prerelease`: defaults to `true`
 - `draft`: defaults to `true`
 
-Before packaging, configure GitHub repository variables for each platform:
+FFmpeg dependency metadata is committed in `.github/ffmpeg.lock.json`; no
+repository variables are required. A `ready` lock records immutable archive and
+redistributed-source URLs plus checksums for `macos-arm64`, `macos-x64`,
+`windows-x64`, and `linux-x64`. Product releases fail closed while the lock is
+`bootstrap_required` or any target is missing.
 
-- `VID2DATASET_FFMPEG_MACOS_ARM64_URL`
-- `VID2DATASET_FFMPEG_MACOS_ARM64_SHA256`
-- `VID2DATASET_FFMPEG_MACOS_ARM64_SOURCE_URL`
-- `VID2DATASET_FFMPEG_MACOS_ARM64_LICENSE_URL`
-- `VID2DATASET_FFMPEG_MACOS_X64_URL`
-- `VID2DATASET_FFMPEG_MACOS_X64_SHA256`
-- `VID2DATASET_FFMPEG_MACOS_X64_SOURCE_URL`
-- `VID2DATASET_FFMPEG_MACOS_X64_LICENSE_URL`
-- `VID2DATASET_FFMPEG_WINDOWS_X64_URL`
-- `VID2DATASET_FFMPEG_WINDOWS_X64_SHA256`
-- `VID2DATASET_FFMPEG_WINDOWS_X64_SOURCE_URL`
-- `VID2DATASET_FFMPEG_WINDOWS_X64_LICENSE_URL`
-- `VID2DATASET_FFMPEG_LINUX_X64_URL`
-- `VID2DATASET_FFMPEG_LINUX_X64_SHA256`
-- `VID2DATASET_FFMPEG_LINUX_X64_SOURCE_URL`
-- `VID2DATASET_FFMPEG_LINUX_X64_LICENSE_URL`
+The dependency workflow is `.github/workflows/ffmpeg-dependency.yml`. It checks
+for numbered stable FFmpeg and zlib releases quarterly at 09:00 UTC on January,
+April, July, and October 1, and it supports manual dispatch for urgent updates.
+It performs the following sequence:
 
-Each FFmpeg archive must contain executable `ffmpeg` and `ffprobe` files. The
-workflow verifies the configured SHA-256 before staging binaries into the Tauri
-resource directory.
+1. Resolve release metadata only from `ffmpeg.org` and `zlib.net`.
+2. Verify source checksums, signatures, and pinned signing-key fingerprints.
+3. Build and smoke-test LGPL binaries on the four release targets.
+4. Upload binaries, exact sources, signatures, notices, and checksums to an
+   immutable draft dependency release.
+5. Open a review PR containing the completed lock manifest.
+6. Promote the draft to a GitHub prerelease only after the lock PR merges.
+
+Accepted dependency releases are retained permanently. A rebuild of the same
+FFmpeg version increments `rN`; existing assets are never replaced.
+
+### First Bootstrap
+
+The committed bootstrap sources are FFmpeg `8.1.2` and zlib `1.3.2`. Their
+source records are verified, but the four binary checksums are intentionally
+absent until GitHub's native runners build them.
+
+One repository setting is required: under **Settings > Actions > General >
+Workflow permissions**, enable **Allow GitHub Actions to create and approve pull
+requests**. Then run **FFmpeg dependency** manually from `stage/vid2dataset2`
+with `base_ref` set to `stage/vid2dataset2`. Review and merge the generated lock
+PR. That merge publishes the dependency prerelease and changes the lock to
+`ready`, after which normal product releases need no FFmpeg setup.
+
+Scheduled checks run only from GitHub's default branch. They begin operating
+quarterly after vid2dataset2 is merged into `main`.
 
 Optional macOS signing and notarization secrets:
 
@@ -174,7 +193,14 @@ For a CI-like FFmpeg staging check from a pinned archive:
 ```bash
 VID2DATASET_RELEASE_FFMPEG_ARCHIVE_URL=https://example.invalid/ffmpeg.zip \
 VID2DATASET_RELEASE_FFMPEG_SHA256=<sha256> \
+VID2DATASET_RELEASE_FFMPEG_ARCHIVE_FORMAT=zip \
 VID2DATASET_RELEASE_FFMPEG_SOURCE_URL=https://example.invalid/source \
 VID2DATASET_RELEASE_FFMPEG_LICENSE_URL=https://ffmpeg.org/legal.html \
 scripts/stage-release-ffmpeg.sh
+```
+
+To stage the accepted dependency exactly as a public release does:
+
+```bash
+scripts/stage-release-ffmpeg.sh --target macos-arm64
 ```

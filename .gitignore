@@ -55,3 +55,6 @@ apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/ffmpeg/bin/*
 !apps/desktop/src-tauri/ffmpeg/bin/.gitkeep
 apps/desktop/src-tauri/ffmpeg/THIRD_PARTY_FFMPEG.txt
+apps/desktop/src-tauri/ffmpeg/LICENSE.LGPLv2.1.txt
+apps/desktop/src-tauri/ffmpeg/ZLIB_LICENSE.txt
+apps/desktop/src-tauri/ffmpeg/FFMPEG_BUILD_INFO.txt

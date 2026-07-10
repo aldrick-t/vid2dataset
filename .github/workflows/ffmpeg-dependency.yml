@@ -1,0 +1,309 @@
+name: FFmpeg dependency
+
+on:
+  schedule:
+    - cron: "0 9 1 1,4,7,10 *"
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: "Branch that receives the dependency PR (leave empty for the selected workflow branch)"
+        required: false
+        type: string
+      force_rebuild:
+        description: "Rebuild even when upstream versions are unchanged"
+        required: true
+        default: false
+        type: boolean
+      build_revision:
+        description: "Optional explicit positive build revision"
+        required: false
+        type: string
+  push:
+    branches:
+      - main
+      - stage/vid2dataset2
+    paths:
+      - ".github/ffmpeg.lock.json"
+
+concurrency:
+  group: ffmpeg-dependency-${{ github.event_name == 'push' && 'promotion' || 'update' }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve and verify sources
+    if: github.event_name != 'push'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    outputs:
+      update_needed: ${{ steps.resolve.outputs.update_needed }}
+      ffmpeg_version: ${{ steps.resolve.outputs.ffmpeg_version }}
+      zlib_version: ${{ steps.resolve.outputs.zlib_version }}
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+      bootstrap: ${{ steps.resolve.outputs.bootstrap }}
+      base_ref: ${{ steps.base.outputs.ref }}
+    steps:
+      - name: Select base branch
+        id: base
+        shell: bash
+        run: |
+          REF="${{ inputs.base_ref }}"
+          if [[ -z "$REF" ]]; then REF="${GITHUB_REF_NAME}"; fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.base.outputs.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Resolve latest stable versions
+        id: resolve
+        shell: bash
+        run: |
+          ARGS=(
+            resolve
+            --root "$GITHUB_WORKSPACE"
+            --lock .github/ffmpeg.lock.json
+            --output dist/ffmpeg-sources/candidate.unverified.json
+            --force "${{ inputs.force_rebuild || false }}"
+          )
+          if [[ -n "${{ inputs.build_revision }}" ]]; then
+            ARGS+=(--build-revision "${{ inputs.build_revision }}")
+          fi
+          node scripts/ffmpeg-dependency.mjs "${ARGS[@]}"
+
+      - name: Install source verification tools
+        if: steps.resolve.outputs.update_needed == 'true'
+        run: sudo apt-get update && sudo apt-get install -y gnupg xz-utils
+
+      - name: Verify official source archives
+        if: steps.resolve.outputs.update_needed == 'true'
+        run: scripts/verify-release-sources.sh dist/ffmpeg-sources/candidate.unverified.json dist/ffmpeg-sources
+
+      - uses: actions/upload-artifact@v4
+        if: steps.resolve.outputs.update_needed == 'true'
+        with:
+          name: ffmpeg-verified-sources
+          path: dist/ffmpeg-sources/*
+          if-no-files-found: error
+          retention-days: 14
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: resolve
+    if: needs.resolve.outputs.update_needed == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            os: macos-15
+          - name: macos-x64
+            os: macos-15-intel
+          - name: windows-x64
+            os: windows-2022
+          - name: linux-x64
+            os: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.base_ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-verified-sources
+          path: dist/ffmpeg-sources
+
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config xz-utils
+
+      - name: Set up MSYS2 UCRT64
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel
+            gzip
+            make
+            mingw-w64-ucrt-x86_64-binutils
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            xz
+
+      - name: Build and validate FFmpeg
+        if: runner.os != 'Windows'
+        shell: bash
+        run: scripts/build-release-ffmpeg.sh "${{ matrix.name }}" dist/ffmpeg-sources/candidate.json dist/ffmpeg-sources dist/ffmpeg-build
+
+      - name: Build and validate FFmpeg on Windows
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: scripts/build-release-ffmpeg.sh "${{ matrix.name }}" dist/ffmpeg-sources/candidate.json dist/ffmpeg-sources dist/ffmpeg-build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-build-${{ matrix.name }}
+          path: dist/ffmpeg-build/*
+          if-no-files-found: error
+          retention-days: 14
+
+  candidate:
+    name: Publish candidate and open lock PR
+    needs: [resolve, build]
+    if: needs.resolve.outputs.update_needed == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+      BASE_REF: ${{ needs.resolve.outputs.base_ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASE_REF }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ffmpeg-build-*
+          path: dist/ffmpeg-builds
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-verified-sources
+          path: dist/ffmpeg-sources
+
+      - name: Generate completed lock and checksums
+        shell: bash
+        run: |
+          node scripts/ffmpeg-dependency.mjs make-lock \
+            --candidate dist/ffmpeg-sources/candidate.json \
+            --manifests-dir dist/ffmpeg-builds \
+            --repository "$GITHUB_REPOSITORY" \
+            --output dist/ffmpeg.lock.json
+          (
+            cd dist
+            find ffmpeg-builds ffmpeg-sources -type f \
+              ! -name 'candidate*' ! -name '*.json' -print0 |
+              sort -z |
+              while IFS= read -r -d '' file; do
+                printf '%s  %s\n' "$(sha256sum "$file" | awk '{print $1}')" "$(basename "$file")"
+              done > SHA256SUMS
+          )
+
+      - name: Create immutable draft dependency release
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; use a new build revision instead of replacing assets." >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" \
+            --draft \
+            --title "FFmpeg dependency candidate $RELEASE_TAG" \
+            --notes "Verified LGPL FFmpeg dependency candidate. It becomes active only after its generated lock PR is merged." \
+            dist/ffmpeg-builds/*.tar.gz \
+            dist/ffmpeg-sources/ffmpeg-source.tar.xz \
+            dist/ffmpeg-sources/ffmpeg-source.tar.xz.asc \
+            dist/ffmpeg-sources/ffmpeg-signing-key.asc \
+            dist/ffmpeg-sources/FFMPEG-COPYING.LGPLv2.1 \
+            dist/ffmpeg-sources/zlib-source.tar.gz \
+            dist/ffmpeg-sources/zlib-source.tar.gz.asc \
+            dist/ffmpeg-sources/zlib-signing-key.asc \
+            dist/ffmpeg-sources/ZLIB-LICENSE \
+            dist/SHA256SUMS
+
+      - name: Push lock branch and open pull request
+        shell: bash
+        run: |
+          BRANCH="automation/$RELEASE_TAG"
+          git checkout -B "$BRANCH"
+          cp dist/ffmpeg.lock.json .github/ffmpeg.lock.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/ffmpeg.lock.json
+          git commit -m "Update bundled FFmpeg dependency to $RELEASE_TAG"
+          git push --force-with-lease origin "HEAD:$BRANCH"
+
+          CLOSES=""
+          if [[ "${{ needs.resolve.outputs.bootstrap }}" == "true" ]]; then CLOSES=$'\n\nCloses #1'; fi
+          BODY="$(cat <<EOF
+          This automated update was built from cryptographically verified official FFmpeg and zlib sources.
+
+          - FFmpeg: ${{ needs.resolve.outputs.ffmpeg_version }}
+          - zlib: ${{ needs.resolve.outputs.zlib_version }}
+          - Dependency release: \`$RELEASE_TAG\`
+          - Targets: macOS ARM64, macOS Intel, Windows x64, Linux x64
+
+          Merging this PR promotes the draft dependency release and makes these checksums active for vid2dataset2 packaging.${CLOSES}
+          EOF
+          )"
+          EXISTING="$(gh pr list --head "$BRANCH" --state open --json url --jq '.[0].url')"
+          if [[ -n "$EXISTING" ]]; then
+            gh pr edit "$EXISTING" --title "Update bundled FFmpeg dependency to $RELEASE_TAG" --body "$BODY"
+          else
+            gh pr create --base "$BASE_REF" --head "$BRANCH" --title "Update bundled FFmpeg dependency to $RELEASE_TAG" --body "$BODY"
+          fi
+
+  promote:
+    name: Promote merged dependency lock
+    if: github.event_name == 'push'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Read lock status
+        id: lock
+        shell: bash
+        run: |
+          STATUS="$(node -e 'console.log(require("./.github/ffmpeg.lock.json").status)')"
+          TAG="$(node -e 'console.log(require("./.github/ffmpeg.lock.json").release.tag)')"
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Verify and publish dependency release
+        if: steps.lock.outputs.status == 'ready'
+        shell: bash
+        run: |
+          mkdir -p dist/ffmpeg-release
+          gh release download "${{ steps.lock.outputs.tag }}" --dir dist/ffmpeg-release
+          (cd dist/ffmpeg-release && sha256sum --check SHA256SUMS)
+          node scripts/ffmpeg-dependency.mjs verify-assets \
+            --lock .github/ffmpeg.lock.json \
+            --assets-dir dist/ffmpeg-release
+          FFMPEG_SOURCE_SHA="$(node -e 'console.log(require("./.github/ffmpeg.lock.json").ffmpeg.source_sha256)')"
+          ZLIB_SOURCE_SHA="$(node -e 'console.log(require("./.github/ffmpeg.lock.json").zlib.source_sha256)')"
+          echo "$FFMPEG_SOURCE_SHA  dist/ffmpeg-release/ffmpeg-source.tar.xz" | sha256sum --check
+          echo "$ZLIB_SOURCE_SHA  dist/ffmpeg-release/zlib-source.tar.gz" | sha256sum --check
+          echo "${{ steps.lock.outputs.tag }} binary assets match the committed lock."
+          gh release edit "${{ steps.lock.outputs.tag }}" \
+            --draft=false \
+            --prerelease \
+            --title "FFmpeg dependency ${{ steps.lock.outputs.tag }}"
