@@ -34,6 +34,11 @@
   },
   "bundle": {
     "active": true,
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "targets": ["app", "dmg", "msi", "deb", "appimage"],
     "resources": {
       "ffmpeg/bin/*": "ffmpeg/bin/",
