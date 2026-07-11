@@ -185,13 +185,21 @@ jobs:
         shell: bash
         working-directory: apps/desktop
         run: |
-          if [[ -n "${TAURI_ARGS:-}" ]]; then
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            # MSI only accepts numeric prerelease identifiers. Keep the app's
+            # SemVer (0.2.0-alpha.2) for other platforms and release metadata.
+            npm run tauri build -- --config '{"version":"0.2.0-2"}'
+          elif [[ -n "${TAURI_ARGS:-}" ]]; then
             npm run tauri build -- $TAURI_ARGS
           else
             npm run tauri build
           fi
         env:
           TAURI_ARGS: ${{ matrix.tauri_args }}
+          # The certificate has already been imported into build.keychain
+          # above. Prevent Tauri from importing the same payload again.
+          APPLE_CERTIFICATE: ""
+          APPLE_CERTIFICATE_PASSWORD: ""
 
       - name: Sign Windows artifacts
         if: runner.os == 'Windows'
