@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "bootstrap_required",
+  "status": "ready",
   "ffmpeg": {
     "version": "8.1.2",
     "source_url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz",
@@ -10,7 +10,8 @@
     "signing_key_url": "https://ffmpeg.org/ffmpeg-devel.asc",
     "signing_key_fingerprint": "FCF986EA15E6E293A5644F10B4322F04D67658D8",
     "license": "LGPL-2.1-or-later",
-    "license_url": "https://github.com/FFmpeg/FFmpeg/blob/n8.1.2/COPYING.LGPLv2.1"
+    "license_url": "https://github.com/FFmpeg/FFmpeg/blob/n8.1.2/COPYING.LGPLv2.1",
+    "redistribution_source_url": "https://github.com/aldrick-t/vid2dataset/releases/download/ffmpeg-8.1.2-r1/ffmpeg-source.tar.xz"
   },
   "zlib": {
     "version": "1.3.2",
@@ -21,12 +22,13 @@
     "signing_key_url": "https://madler.net/madler/pgp.html",
     "signing_key_fingerprint": "5ED46A6721D365587791E2AA783FCD8E58BCAFBA",
     "license": "Zlib",
-    "license_url": "https://github.com/madler/zlib/blob/v1.3.2/LICENSE"
+    "license_url": "https://github.com/madler/zlib/blob/v1.3.2/LICENSE",
+    "redistribution_source_url": "https://github.com/aldrick-t/vid2dataset/releases/download/ffmpeg-8.1.2-r1/zlib-source.tar.gz"
   },
   "build": {
     "revision": 1,
     "recipe_version": 1,
-    "recipe_sha256": "ea5a956c25945b70cff97b0a5cb1e6a12b5abc4d72a0d8cec2ea54f084e4aad3",
+    "recipe_sha256": "91d652ab0a4bb7d1ca77d5ff1fb9424c74cbd363d89e4ce7a1377c832d0c6abd",
     "configure_flags": [
       "--disable-autodetect",
       "--enable-zlib",
@@ -41,7 +43,41 @@
   },
   "release": {
     "tag": "ffmpeg-8.1.2-r1",
-    "prerelease": true
+    "prerelease": true,
+    "url": "https://github.com/aldrick-t/vid2dataset/releases/tag/ffmpeg-8.1.2-r1"
   },
-  "artifacts": {}
+  "artifacts": {
+    "macos-arm64": {
+      "url": "https://github.com/aldrick-t/vid2dataset/releases/download/ffmpeg-8.1.2-r1/ffmpeg-8.1.2-r1-macos-arm64.tar.gz",
+      "sha256": "c59e45a4ef5e4a33e8ba79770939c690949ae17db04b31bca6b290bbb570189e",
+      "archive_format": "tar.gz",
+      "architecture": "aarch64-apple-darwin",
+      "ffmpeg_path": "bin/ffmpeg",
+      "ffprobe_path": "bin/ffprobe"
+    },
+    "macos-x64": {
+      "url": "https://github.com/aldrick-t/vid2dataset/releases/download/ffmpeg-8.1.2-r1/ffmpeg-8.1.2-r1-macos-x64.tar.gz",
+      "sha256": "14c57f5a828c772b420b1d588f5070709cd3d27f5398d4ea4a85d3ab7e33eca3",
+      "archive_format": "tar.gz",
+      "architecture": "x86_64-apple-darwin",
+      "ffmpeg_path": "bin/ffmpeg",
+      "ffprobe_path": "bin/ffprobe"
+    },
+    "windows-x64": {
+      "url": "https://github.com/aldrick-t/vid2dataset/releases/download/ffmpeg-8.1.2-r1/ffmpeg-8.1.2-r1-windows-x64.tar.gz",
+      "sha256": "a87950d9e2505f4aae6b250b6cc59b67ee805e74519b1bd461cd10f5338054e9",
+      "archive_format": "tar.gz",
+      "architecture": "x86_64-pc-windows-gnu",
+      "ffmpeg_path": "bin/ffmpeg.exe",
+      "ffprobe_path": "bin/ffprobe.exe"
+    },
+    "linux-x64": {
+      "url": "https://github.com/aldrick-t/vid2dataset/releases/download/ffmpeg-8.1.2-r1/ffmpeg-8.1.2-r1-linux-x64.tar.gz",
+      "sha256": "bad92541f55e8f3d0095637f700940dc3443ef8e5edacde248cba355b66d0eb2",
+      "archive_format": "tar.gz",
+      "architecture": "x86_64-unknown-linux-gnu",
+      "ffmpeg_path": "bin/ffmpeg",
+      "ffprobe_path": "bin/ffprobe"
+    }
+  }
 }
