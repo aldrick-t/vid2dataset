@@ -59,6 +59,13 @@ if [[ "$TARGET" == "windows-x64" ]]; then
   CONFIGURE_FLAGS+=("--enable-w32threads")
 fi
 
+EXE_SUFFIX=""
+PROGRAM_TARGETS=(ffmpeg ffprobe)
+if [[ "$TARGET" == "windows-x64" ]]; then
+  EXE_SUFFIX=".exe"
+  PROGRAM_TARGETS=(ffmpeg.exe ffprobe.exe)
+fi
+
 (
   cd "$FFMPEG_SOURCE"
   PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure \
@@ -68,11 +75,9 @@ fi
     --extra-ldflags="$EXTRA_LDFLAGS" \
     --extra-libs="$EXTRA_LIBS" \
     "${CONFIGURE_FLAGS[@]}"
-  make -j"$JOBS" ffmpeg ffprobe
+  make -j"$JOBS" "${PROGRAM_TARGETS[@]}"
 )
 
-EXE_SUFFIX=""
-if [[ "$TARGET" == "windows-x64" ]]; then EXE_SUFFIX=".exe"; fi
 FFMPEG_BIN="$FFMPEG_SOURCE/ffmpeg$EXE_SUFFIX"
 FFPROBE_BIN="$FFMPEG_SOURCE/ffprobe$EXE_SUFFIX"
 [[ -x "$FFMPEG_BIN" && -x "$FFPROBE_BIN" ]] || { echo "FFmpeg build did not produce both executables" >&2; exit 1; }
