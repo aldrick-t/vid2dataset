@@ -1,4 +1,5 @@
 # vid2dataset
+[![Release](https://github.com/aldrick-t/vid2dataset/actions/workflows/release.yml/badge.svg)](https://github.com/aldrick-t/vid2dataset/actions/workflows/release.yml)
 
 `vid2dataset` creates image datasets from video files. Version 2 is a clean Rust + Tauri rewrite with a shared FFmpeg-backed core, a full CLI, and a non-Qt desktop GUI.
 
