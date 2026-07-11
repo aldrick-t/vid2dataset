@@ -89,8 +89,6 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
       WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
       WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
@@ -126,6 +124,9 @@ jobs:
       - name: Import Apple signing certificate
         if: runner.os == 'macOS'
         shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
           if [[ -z "${APPLE_CERTIFICATE:-}" ]]; then
             echo "APPLE_CERTIFICATE is not configured; building unsigned macOS artifacts."
@@ -196,10 +197,6 @@ jobs:
           fi
         env:
           TAURI_ARGS: ${{ matrix.tauri_args }}
-          # The certificate has already been imported into build.keychain
-          # above. Prevent Tauri from importing the same payload again.
-          APPLE_CERTIFICATE: ""
-          APPLE_CERTIFICATE_PASSWORD: ""
 
       - name: Sign Windows artifacts
         if: runner.os == 'Windows'
