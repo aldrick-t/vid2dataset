@@ -24,12 +24,22 @@ sha256_file() {
 rm -rf "$RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
 
-if [[ ! -d "$BUNDLE_ROOT" && -d "$FALLBACK_BUNDLE_ROOT" ]]; then
+if [[ ! -d "$BUNDLE_ROOT" ]]; then
   BUNDLE_ROOT="$FALLBACK_BUNDLE_ROOT"
 fi
 
 if [[ ! -d "$BUNDLE_ROOT" ]]; then
-  echo "No Tauri bundle directory found at $BUNDLE_ROOT or $FALLBACK_BUNDLE_ROOT" >&2
+  while IFS= read -r candidate; do
+    BUNDLE_ROOT="$candidate"
+    break
+  done < <(
+    find "$ROOT_DIR/target" "$ROOT_DIR/apps/desktop/src-tauri/target" \
+      -mindepth 3 -maxdepth 3 -type d -path '*/release/bundle' -print 2>/dev/null
+  )
+fi
+
+if [[ ! -d "$BUNDLE_ROOT" ]]; then
+  echo "No Tauri bundle directory found in target/release/bundle or target-specific release bundle directories" >&2
   exit 1
 fi
 
