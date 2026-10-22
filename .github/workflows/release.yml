@@ -1,39 +1,67 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Git tag to release"
-        required: true
-        default: "v0.2.0-alpha.2"
-      release_name:
-        description: "GitHub release title"
-        required: true
-        default: "vid2dataset2 Alpha 2"
-      prerelease:
-        description: "Mark the GitHub release as a prerelease"
-        type: boolean
-        required: true
-        default: true
-      draft:
-        description: "Create the GitHub release as a draft"
-        type: boolean
-        required: true
-        default: true
+  workflow_run:
+    workflows: ["Release Request"]
+    types: [completed]
 
-permissions:
-  contents: write
+permissions: {}
 
 jobs:
-  validate:
-    name: Validate
+  prepare:
+    name: Validate release request
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      (
+        (github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_branch, 'v')) ||
+        (github.event.workflow_run.event == 'workflow_dispatch' &&
+         github.event.workflow_run.head_branch == github.event.repository.default_branch)
+      )
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      tag: ${{ steps.request.outputs.tag }}
+      source_sha: ${{ steps.request.outputs.source_sha }}
+      release_name: ${{ steps.request.outputs.release_name }}
+      prerelease: ${{ steps.request.outputs.prerelease }}
+      draft: ${{ steps.request.outputs.draft }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Download manual release request metadata
+        if: github.event.workflow_run.event == 'workflow_dispatch'
+        uses: actions/download-artifact@v4
+        with:
+          name: release-request
+          path: release-request
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Validate the selected release source
+        id: request
+        env:
+          SOURCE_EVENT: ${{ github.event.workflow_run.event }}
+          SOURCE_REF: ${{ github.event.workflow_run.head_branch }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: node scripts/validate-release-request.mjs
+
+  validate:
+    name: Validate
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
 
       - name: Install Linux Tauri dependencies
         run: |
@@ -63,8 +91,10 @@ jobs:
 
   build:
     name: Build ${{ matrix.name }}
-    needs: validate
+    needs: [prepare, validate]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -85,15 +115,10 @@ jobs:
             os: ubuntu-22.04
             tauri_args: ""
             rust_targets: ""
-    env:
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
 
       - name: Install Linux Tauri dependencies
         if: runner.os == 'Linux'
@@ -127,6 +152,7 @@ jobs:
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           if [[ -z "${APPLE_CERTIFICATE:-}" ]]; then
             echo "APPLE_CERTIFICATE is not configured; building unsigned macOS artifacts."
@@ -197,10 +223,17 @@ jobs:
           fi
         env:
           TAURI_ARGS: ${{ matrix.tauri_args }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
 
       - name: Sign Windows artifacts
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
           if (-not $env:WINDOWS_CERTIFICATE) {
             Write-Host "WINDOWS_CERTIFICATE is not configured; building unsigned Windows artifacts."
@@ -247,8 +280,11 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    needs: build
+    needs: [prepare, build]
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -264,10 +300,11 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_name || format('vid2dataset2 {0}', github.ref_name) }}
-          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
-          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          target_commitish: ${{ needs.prepare.outputs.source_sha }}
+          name: ${{ needs.prepare.outputs.release_name }}
+          draft: ${{ needs.prepare.outputs.draft }}
+          prerelease: ${{ needs.prepare.outputs.prerelease }}
           files: |
             dist/release-artifacts/**/*
-          body_path: docs/release.md
+          body_path: docs/release-notes/v0.2.0-alpha.2.md
