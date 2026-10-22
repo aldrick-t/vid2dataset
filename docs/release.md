@@ -80,9 +80,16 @@ installer portability is validated by confirming `doctor` reports the source as
 
 ## Release Automation
 
-The release workflow is `.github/workflows/release.yml`.
+Release requests are recorded by `.github/workflows/release-request.yml`; the
+privileged build and publish workflow is `.github/workflows/release.yml`. The
+request workflow carries no signing secrets. The release workflow runs from the
+default branch, accepts only commits reachable from that branch, and builds the
+exact commit named by the release tag.
 
-It runs on pushed `v*` tags and can also be started manually with:
+Pushing a `v*` tag starts a release automatically. For a manual release, start
+**Release Request** from the repository default branch and select an existing
+tag reachable from that branch. Manual dispatch from another branch is ignored.
+Manual requests accept:
 
 - `tag`: defaults to `v0.2.0-alpha.2`
 - `release_name`: defaults to `vid2dataset2 Alpha 2`
