@@ -90,23 +90,23 @@ type VideoJob = {
 type FormState = {
   input: string;
   outputDir: string;
-  everyNFrames: number;
-  limit: number;
+  everyNFrames: number | null;
+  limit: number | null;
   cropSpace: CropSpace;
-  cropX: number;
-  cropY: number;
-  cropW: number;
-  cropH: number;
+  cropX: number | null;
+  cropY: number | null;
+  cropW: number | null;
+  cropH: number | null;
   resize: string;
   format: ImageFormat;
   prefix: string;
-  startNumber: number;
+  startNumber: number | null;
   manifestJsonl: boolean;
   manifestCsv: boolean;
   colorSpace: ColorSpace | "";
   ffmpegPath: string;
   ffprobePath: string;
-  workers: number;
+  workers: number | null;
   overwrite: boolean;
 };
 
@@ -199,14 +199,15 @@ function App() {
   const doctorStarted = React.useRef(false);
 
   const job = React.useMemo(() => buildJob(form, cropDecision), [form, cropDecision]);
-  const cropEnabled = cropDecision === "crop" && form.cropW > 0 && form.cropH > 0;
+  const cropEnabled = cropDecision === "crop" && (form.cropW ?? 0) > 0 && (form.cropH ?? 0) > 0;
   const completion = React.useMemo(
     () => stepCompletion(form, videoInfo, cropDecision, samplingConfirmed, outputConfirmed, queue),
     [form, videoInfo, cropDecision, samplingConfirmed, outputConfirmed, queue],
   );
   const activeStep = completion.findIndex((done) => !done);
   const activeStepIndex = activeStep === -1 ? steps.length - 1 : activeStep;
-  const canRun = completion.slice(0, 4).every(Boolean) && activeRunId === null;
+  const numericSettingsValid = validNumericSettings(form, cropDecision);
+  const canRun = completion.slice(0, 4).every(Boolean) && numericSettingsValid && activeRunId === null;
   const fps = resolvedFps(videoInfo);
   const frameNumber = fps ? Math.round(currentTime * fps) : 0;
 
@@ -326,7 +327,9 @@ function App() {
       return;
     }
     if (!canRun) {
-      pushLog("Complete input, crop/no-crop, sampling, and output before running.");
+      pushLog(numericSettingsValid
+        ? "Complete input, crop/no-crop, sampling, and output before running."
+        : "Enter a valid whole number in every numeric field before running.");
       return;
     }
     const runId = Date.now();
@@ -336,7 +339,7 @@ function App() {
       id: runId,
       input: form.input,
       output: form.outputDir,
-      sampling: `Every ${form.everyNFrames} frame${form.everyNFrames === 1 ? "" : "s"}`,
+      sampling: `Every ${form.everyNFrames ?? 1} frame${form.everyNFrames === 1 ? "" : "s"}`,
       status: "running",
       framesWritten: null,
     };
@@ -478,7 +481,7 @@ function App() {
   }
 
   function confirmCrop() {
-    if (form.cropW > 0 && form.cropH > 0) {
+    if ((form.cropW ?? 0) > 0 && (form.cropH ?? 0) > 0) {
       setCropDecision("crop");
     } else {
       pushLog("Draw a crop rectangle or choose No Crop.");
@@ -709,7 +712,7 @@ function App() {
                     <i className="handle tr" data-handle="tr" />
                     <i className="handle bl" data-handle="bl" />
                     <i className="handle br" data-handle="br" />
-                    <span>{form.cropW}x{form.cropH}</span>
+                    <span>{form.cropW ?? ""}x{form.cropH ?? ""}</span>
                   </div>
                 )}
               </>
@@ -778,8 +781,15 @@ function App() {
 
       <section className="run-area">
         <div className="queue-head">
-          <strong>Run Queue</strong>
-          <div>
+          <div className="queue-title">
+            <strong>Run Queue</strong>
+            {!numericSettingsValid && (
+              <span className="missing" role="status">
+                Enter a valid whole number in every numeric field to enable Run Job.
+              </span>
+            )}
+          </div>
+          <div className="queue-actions">
             <button onClick={runExtraction} disabled={!canRun}><Plus size={15} /> Run Job</button>
             <button onClick={requestCancel} disabled={activeRunId === null}><Square size={15} /> Cancel</button>
             <button onClick={() => runDoctor(true)}>Run Doctor</button>
@@ -869,9 +879,13 @@ function GuidedPanel({
       </div>
       <label>
         Every N frames
-        <input type="number" min={1} value={form.everyNFrames} onChange={(event) => setFormValue("everyNFrames", numberValue(event, 1))} />
+        <NumericInput
+          min={1}
+          value={form.everyNFrames}
+          onValueChange={(value) => setFormValue("everyNFrames", value)}
+        />
       </label>
-      <button className="confirm" onClick={onConfirmSampling}>
+      <button className="confirm" onClick={onConfirmSampling} disabled={!isIntegerAtLeast(form.everyNFrames, 1)}>
         {samplingConfirmed ? <Check size={15} /> : null} Confirm Sampling
       </button>
       <label>
@@ -882,10 +896,10 @@ function GuidedPanel({
         </select>
       </label>
       <div className="quad">
-        <label>X<input type="number" min={0} value={form.cropX} onChange={(event) => setFormValue("cropX", numberValue(event, 0))} /></label>
-        <label>Y<input type="number" min={0} value={form.cropY} onChange={(event) => setFormValue("cropY", numberValue(event, 0))} /></label>
-        <label>W<input type="number" min={0} value={form.cropW} onChange={(event) => setFormValue("cropW", numberValue(event, 0))} /></label>
-        <label>H<input type="number" min={0} value={form.cropH} onChange={(event) => setFormValue("cropH", numberValue(event, 0))} /></label>
+        <label>X<NumericInput min={0} value={form.cropX} onValueChange={(value) => setFormValue("cropX", value)} /></label>
+        <label>Y<NumericInput min={0} value={form.cropY} onValueChange={(value) => setFormValue("cropY", value)} /></label>
+        <label>W<NumericInput min={0} value={form.cropW} onValueChange={(value) => setFormValue("cropW", value)} /></label>
+        <label>H<NumericInput min={0} value={form.cropH} onValueChange={(value) => setFormValue("cropH", value)} /></label>
       </div>
       <label>
         Resize output
@@ -928,10 +942,10 @@ function AdvancedPanel({
     <div className="form">
       <label>FFmpeg path<input value={form.ffmpegPath} onChange={(event) => setFormValue("ffmpegPath", event.target.value)} placeholder="Bundled, env, system, or explicit path" /></label>
       <label>FFprobe path<input value={form.ffprobePath} onChange={(event) => setFormValue("ffprobePath", event.target.value)} placeholder="Bundled, env, system, or explicit path" /></label>
-      <label>Worker count<input type="number" min={1} value={form.workers} onChange={(event) => setFormValue("workers", numberValue(event, 1))} /></label>
+      <label>Worker count<NumericInput min={1} value={form.workers} onValueChange={(value) => setFormValue("workers", value)} /></label>
       <label>Filename prefix<input value={form.prefix} onChange={(event) => setFormValue("prefix", event.target.value)} /></label>
-      <label>Start number<input type="number" min={0} value={form.startNumber} onChange={(event) => setFormValue("startNumber", numberValue(event, 0))} /></label>
-      <label>Limit frames<input type="number" min={0} value={form.limit} onChange={(event) => setFormValue("limit", numberValue(event, 0))} /></label>
+      <label>Start number<NumericInput min={0} value={form.startNumber} onValueChange={(value) => setFormValue("startNumber", value)} /></label>
+      <label>Limit frames<NumericInput min={0} value={form.limit} onValueChange={(value) => setFormValue("limit", value)} /></label>
       <label>Color space<select value={form.colorSpace} onChange={(event) => setFormValue("colorSpace", event.target.value as ColorSpace | "")}><option value="">Original</option><option value="bgr">BGR</option><option value="rgb">RGB</option><option value="gray">GRAY</option><option value="hsv">HSV</option></select></label>
       <label className="check"><input type="checkbox" checked={form.overwrite} onChange={(event) => setFormValue("overwrite", event.target.checked)} /> Overwrite existing frames</label>
     </div>
@@ -943,12 +957,17 @@ function buildJob(form: FormState, cropDecision: CropDecision): VideoJob {
     input: form.input,
     output_dir: form.outputDir,
     sampling: {
-      every_n_frames: Math.max(1, form.everyNFrames),
-      limit: form.limit > 0 ? form.limit : null,
+      every_n_frames: Math.max(1, form.everyNFrames ?? 1),
+      limit: form.limit !== null && form.limit > 0 ? form.limit : null,
     },
     transforms: {
-      crop: cropDecision === "crop" && form.cropW > 0 && form.cropH > 0
-        ? { x: form.cropX, y: form.cropY, width: form.cropW, height: form.cropH }
+      crop: cropDecision === "crop" && (form.cropW ?? 0) > 0 && (form.cropH ?? 0) > 0
+        ? {
+          x: form.cropX ?? 0,
+          y: form.cropY ?? 0,
+          width: form.cropW ?? 0,
+          height: form.cropH ?? 0,
+        }
         : null,
       crop_space: form.cropSpace,
       resize: parseResize(form.resize),
@@ -956,7 +975,7 @@ function buildJob(form: FormState, cropDecision: CropDecision): VideoJob {
     },
     format: form.format,
     prefix: form.prefix.trim() || "frame",
-    start_number: form.startNumber,
+    start_number: form.startNumber ?? 0,
     manifests: [
       ...(form.manifestJsonl ? ["jsonl" as const] : []),
       ...(form.manifestCsv ? ["csv" as const] : []),
@@ -964,7 +983,7 @@ function buildJob(form: FormState, cropDecision: CropDecision): VideoJob {
     runtime: {
       ffmpeg_path: form.ffmpegPath || null,
       ffprobe_path: form.ffprobePath || null,
-      workers: Math.max(1, form.workers),
+      workers: Math.max(1, form.workers ?? 1),
       overwrite: form.overwrite,
     },
   };
@@ -982,9 +1001,137 @@ function parseResize(raw: string): { width: number; height: number } | null {
   return { width, height };
 }
 
-function numberValue(event: React.ChangeEvent<HTMLInputElement>, fallback: number) {
-  const value = Number.parseInt(event.target.value, 10);
-  return Number.isFinite(value) ? value : fallback;
+function isIntegerAtLeast(value: number | null, min: number) {
+  return value !== null && Number.isInteger(value) && value >= min;
+}
+
+function validNumericSettings(form: FormState, cropDecision: CropDecision) {
+  return isIntegerAtLeast(form.everyNFrames, 1)
+    && isIntegerAtLeast(form.limit, 0)
+    && isIntegerAtLeast(form.cropX, 0)
+    && isIntegerAtLeast(form.cropY, 0)
+    && isIntegerAtLeast(form.cropW, 0)
+    && isIntegerAtLeast(form.cropH, 0)
+    && isIntegerAtLeast(form.startNumber, 0)
+    && isIntegerAtLeast(form.workers, 1)
+    && (cropDecision !== "crop" || ((form.cropW ?? 0) > 0 && (form.cropH ?? 0) > 0));
+}
+
+function parseIntegerDraft(raw: string, min: number): number | null {
+  const normalized = raw.trim();
+  if (!/^\d+$/.test(normalized)) {
+    return null;
+  }
+  const parsed = Number(normalized);
+  return Number.isSafeInteger(parsed) && parsed >= min ? parsed : null;
+}
+
+function NumericInput({
+  min,
+  value,
+  onValueChange,
+}: {
+  min: number;
+  value: number | null;
+  onValueChange: (value: number | null) => void;
+}) {
+  const [draft, setDraft] = React.useState(() => value === null ? "" : String(value));
+  const focused = React.useRef(false);
+  const selectAfterFocusClick = React.useRef(false);
+  const replaceNextInput = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!focused.current) {
+      setDraft(value === null ? "" : String(value));
+    }
+  }, [value]);
+
+  function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const inputEvent = event.nativeEvent as InputEvent;
+    let raw = event.target.value;
+    if (replaceNextInput.current) {
+      replaceNextInput.current = false;
+      if (inputEvent.inputType.startsWith("insert") && inputEvent.data !== null) {
+        raw = inputEvent.data;
+      }
+    }
+    setDraft(raw);
+    onValueChange(parseIntegerDraft(raw, min));
+  }
+
+  function handleBlur() {
+    focused.current = false;
+    selectAfterFocusClick.current = false;
+    replaceNextInput.current = false;
+    const parsed = parseIntegerDraft(draft, min);
+    if (parsed !== null) {
+      setDraft(String(parsed));
+    }
+    onValueChange(parsed);
+  }
+
+  function handlePaste(event: React.ClipboardEvent<HTMLInputElement>) {
+    if (!replaceNextInput.current) {
+      return;
+    }
+    event.preventDefault();
+    replaceNextInput.current = false;
+    const raw = event.clipboardData.getData("text");
+    setDraft(raw);
+    onValueChange(parseIntegerDraft(raw, min));
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      stepValue(event.key === "ArrowUp" ? 1 : -1);
+    }
+  }
+
+  function stepValue(direction: 1 | -1) {
+    replaceNextInput.current = false;
+    const current = parseIntegerDraft(draft, min);
+    const next = current === null ? min : Math.max(min, current + direction);
+    setDraft(String(next));
+    onValueChange(next);
+  }
+
+  return (
+    <div className="numeric-input">
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={draft}
+        aria-invalid={value === null}
+        onFocus={(event) => {
+          focused.current = true;
+          selectAfterFocusClick.current = true;
+          replaceNextInput.current = true;
+          event.currentTarget.select();
+        }}
+        onMouseDown={() => {
+          if (!focused.current) {
+            replaceNextInput.current = true;
+          }
+        }}
+        onClick={(event) => {
+          if (selectAfterFocusClick.current) {
+            event.currentTarget.select();
+            selectAfterFocusClick.current = false;
+          }
+        }}
+        onChange={handleChange}
+        onPaste={handlePaste}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+      />
+      <div className="numeric-stepper">
+        <button type="button" aria-label="Increase value" onMouseDown={(event) => event.preventDefault()} onClick={() => stepValue(1)}>▲</button>
+        <button type="button" aria-label="Decrease value" onMouseDown={(event) => event.preventDefault()} onClick={() => stepValue(-1)}>▼</button>
+      </div>
+    </div>
+  );
 }
 
 function stepCompletion(
@@ -1006,10 +1153,10 @@ function stepCompletion(
 
 function cropBoxStyle(form: FormState, videoInfo: VideoInfo | null): React.CSSProperties {
   const basis = cropBasisSize(form, videoInfo);
-  const left = clamp((form.cropX / basis.width) * 100, 0, 100);
-  const top = clamp((form.cropY / basis.height) * 100, 0, 100);
-  const boxWidth = clamp((form.cropW / basis.width) * 100, 0, 100 - left);
-  const boxHeight = clamp((form.cropH / basis.height) * 100, 0, 100 - top);
+  const left = clamp(((form.cropX ?? 0) / basis.width) * 100, 0, 100);
+  const top = clamp(((form.cropY ?? 0) / basis.height) * 100, 0, 100);
+  const boxWidth = clamp(((form.cropW ?? 0) / basis.width) * 100, 0, 100 - left);
+  const boxHeight = clamp(((form.cropH ?? 0) / basis.height) * 100, 0, 100 - top);
   return {
     left: `${left}%`,
     top: `${top}%`,
@@ -1028,10 +1175,10 @@ function cropBasisSize(form: FormState, info: VideoInfo | null) {
 
 function currentCrop(form: FormState): CropRect {
   return {
-    x: form.cropX,
-    y: form.cropY,
-    width: form.cropW,
-    height: form.cropH,
+    x: form.cropX ?? 0,
+    y: form.cropY ?? 0,
+    width: form.cropW ?? 0,
+    height: form.cropH ?? 0,
   };
 }
 
