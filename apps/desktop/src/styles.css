@@ -399,6 +399,51 @@ button:disabled {
   background: #ffffff;
 }
 
+.form input[aria-invalid="true"] {
+  border-color: #a54231;
+}
+
+.numeric-input {
+  position: relative;
+  width: 100%;
+}
+
+.numeric-input input {
+  padding-right: 32px;
+}
+
+.numeric-stepper {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  transform: translateY(-50%);
+}
+
+.numeric-stepper button {
+  display: flex;
+  width: 18px;
+  height: 11px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #647078;
+  cursor: pointer;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.numeric-stepper button:hover {
+  color: #087a78;
+}
+
+.numeric-stepper button:focus-visible {
+  outline: 2px solid #087a78;
+  outline-offset: 1px;
+}
+
 .input-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -463,6 +508,16 @@ fieldset input,
 .queue-head div {
   display: flex;
   gap: 8px;
+}
+
+.queue-head .queue-title {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.queue-head .queue-actions {
+  align-items: center;
 }
 
 .queue-table {
