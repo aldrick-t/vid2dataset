@@ -9,16 +9,11 @@ on:
       tag:
         description: "Git tag to release"
         required: true
-        default: "v0.2.0-alpha.3"
+        default: "v0.2.0-alpha.4"
       release_name:
         description: "GitHub release title"
         required: true
-        default: "vid2dataset2 Alpha 3"
-      prerelease:
-        description: "Mark the GitHub release as a prerelease"
-        type: boolean
-        required: true
-        default: true
+        default: "vid2dataset2 Alpha 4"
       draft:
         description: "Create the GitHub release as a draft"
         type: boolean
@@ -39,7 +34,6 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           INPUT_TAG: ${{ inputs.tag }}
           INPUT_RELEASE_NAME: ${{ inputs.release_name }}
-          INPUT_PRERELEASE: ${{ inputs.prerelease }}
           INPUT_DRAFT: ${{ inputs.draft }}
         run: |
           node --input-type=module <<'NODE'
@@ -47,17 +41,20 @@ jobs:
 
           const isManual = process.env.EVENT_NAME === "workflow_dispatch";
           const tag = isManual ? process.env.INPUT_TAG : process.env.REF_NAME;
-          const alphaMatch = /^v\d+\.\d+\.\d+-alpha\.(\d+)$/i.exec(tag);
+          const stageMatch = /^v\d+\.\d+\.\d+-(alpha|beta|rc)\.(\d+)$/i.exec(tag);
+          const releaseStage = stageMatch?.[1].toLowerCase();
+          const stageName = releaseStage === "rc"
+            ? "Release Candidate"
+            : releaseStage
+              ? releaseStage[0].toUpperCase() + releaseStage.slice(1)
+              : null;
           const metadata = {
             tag,
             releaseName: isManual
               ? process.env.INPUT_RELEASE_NAME
-              : alphaMatch
-                ? `vid2dataset2 Alpha ${alphaMatch[1]}`
+              : stageMatch
+                ? `vid2dataset2 ${stageName} ${stageMatch[2]}`
                 : `vid2dataset2 ${tag}`,
-            prerelease: isManual
-              ? process.env.INPUT_PRERELEASE === "true"
-              : /alpha|beta|rc/i.test(tag),
             draft: isManual ? process.env.INPUT_DRAFT === "true" : true,
           };
 

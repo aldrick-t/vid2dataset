@@ -8,9 +8,9 @@ implementation remains under `legacy/` for reference and migration checks.
 
 The current prepared release is:
 
-- Product release title: `vid2dataset2 Alpha 3`
-- Machine version: `0.2.0-alpha.3`
-- Git tag: `v0.2.0-alpha.3`
+- Product release title: `vid2dataset2 Alpha 4`
+- Machine version: `0.2.0-alpha.4`
+- Git tag: `v0.2.0-alpha.4`
 
 Use SemVer prerelease identifiers for every public prerelease:
 
@@ -41,7 +41,7 @@ vid2dataset2 desktop packaging.
 
 Public desktop builds target:
 
-- macOS ARM64 and x64: DMG installer plus zipped `.app` where Tauri produces it.
+- macOS ARM64: DMG installer plus zipped `.app` where Tauri produces it.
 - Windows x64: MSI installer. Portable Windows packaging can be added after the
   app resource layout is validated outside the installer.
 - Linux x64: AppImage and deb. AppImage is the primary portable-style Linux
@@ -83,28 +83,25 @@ installer portability is validated by confirming `doctor` reports the source as
 Release requests are recorded by `.github/workflows/release-request.yml`; the
 privileged build and publish workflow is `.github/workflows/release.yml`. The
 request workflow carries no signing secrets. The release workflow runs from the
-default branch, accepts only commits reachable from that branch, and builds the
-exact commit named by the release tag.
+default branch, accepts only a tag pointing to its current commit, and builds
+that exact commit.
 
 Pushing a `v*` tag starts the release build automatically and creates a draft
 GitHub Release for review. Do not manually dispatch the same tag after pushing
 it, since the tag push already started a run. Use **Release Request** manually
 from the repository default branch only to retry an existing tag whose earlier
 run did not complete. Manual dispatch from another branch is ignored. The
-selected tag must identify the reviewed current `main` commit for this release;
-the workflow also accepts older reachable commits, so do not select a
-historical tag for a new release.
+selected tag must identify the reviewed current default-branch commit for this release.
 
 Manual requests accept:
 
-- `tag`: defaults to `v0.2.0-alpha.3`
-- `release_name`: defaults to `vid2dataset2 Alpha 3`
-- `prerelease`: defaults to `true`
+- `tag`: defaults to `v0.2.0-alpha.4`
+- `release_name`: defaults to `vid2dataset2 Alpha 4`
 - `draft`: defaults to `true`
 
-### Alpha 3 release checklist
+### Alpha 4 release checklist
 
-1. Merge the Alpha 3 version bump and release notes to `main`, then update the
+1. Merge the Alpha 4 version bump and release notes to `main`, then update the
    local branch with `git pull --ff-only origin main`. Confirm the worktree is
    clean and that `main` contains the exact commit you intend to release.
 2. Run the required alpha checks: `cargo fmt --all --check`,
@@ -113,29 +110,29 @@ Manual requests accept:
 3. Create and push the tag on the reviewed `main` commit:
 
    ```bash
-   git tag -a v0.2.0-alpha.3 -m "vid2dataset2 Alpha 3"
-   git push origin v0.2.0-alpha.3
+   git tag -a v0.2.0-alpha.4 -m "vid2dataset2 Alpha 4"
+   git push origin v0.2.0-alpha.4
    ```
 
 4. The tag push starts **Release Request**, followed by **Release**. Monitor
    both runs. The release validates
-   the tag, runs workspace/frontend checks, builds macOS ARM64/x64, Windows
+   the tag, runs workspace/frontend checks, builds macOS ARM64, Windows
    x64, and Linux x64 packages, and uploads SHA-256 checksums.
 5. Review the draft notes and platform artifacts, verify the checksums, and
    smoke-test installers on the target operating systems. Publish the draft
    from GitHub Releases when it is ready.
 
-If the automatic run fails and you need to retry the existing tag, run
-**Release Request** manually on `main` with tag `v0.2.0-alpha.3`, release name
-`vid2dataset2 Alpha 3`, prerelease `true`, and draft `true`.
+If the automatic run fails, you can retry while the tag still points to the
+current default-branch commit. Run **Release Request** manually on `main` with
+tag `v0.2.0-alpha.4`, release name `vid2dataset2 Alpha 4`, and draft `true`.
 
-Alpha 3's FFmpeg dependency lock is already `ready`; the dependency bootstrap
+Alpha 4's FFmpeg dependency lock is already `ready`; the dependency bootstrap
 workflow is not needed for this release.
 
 FFmpeg dependency metadata is committed in `.github/ffmpeg.lock.json`; no
 repository variables are required. A `ready` lock records immutable archive and
-redistributed-source URLs plus checksums for `macos-arm64`, `macos-x64`,
-`windows-x64`, and `linux-x64`. Product releases fail closed while the lock is
+redistributed-source URLs plus checksums for `macos-arm64`, `windows-x64`,
+and `linux-x64`. Product releases fail closed while the lock is
 `bootstrap_required` or any target is missing.
 
 The dependency workflow is `.github/workflows/ffmpeg-dependency.yml`. It checks
@@ -145,7 +142,7 @@ It performs the following sequence:
 
 1. Resolve release metadata only from `ffmpeg.org` and `zlib.net`.
 2. Verify source checksums, signatures, and pinned signing-key fingerprints.
-3. Build and smoke-test LGPL binaries on the four release targets.
+3. Build and smoke-test LGPL binaries on macOS ARM64, Windows x64, and Linux x64.
 4. Upload binaries, exact sources, signatures, notices, and checksums to an
    immutable draft dependency release.
 5. Open a review PR containing the completed lock manifest.
@@ -154,51 +151,45 @@ It performs the following sequence:
 Accepted dependency releases are retained permanently. A rebuild of the same
 FFmpeg version increments `rN`; existing assets are never replaced.
 
-### First Bootstrap
+### FFmpeg Dependency Workflow Configuration
 
-The committed bootstrap sources are FFmpeg `8.1.2` and zlib `1.3.2`. Their
-source records are verified, but the four binary checksums are intentionally
-absent until GitHub's native runners build them.
+The current ready lock records FFmpeg `8.1.2` and zlib `1.3.2`, with verified
+source records and checksums for the three supported targets. Alpha 4 needs no
+dependency bootstrap. For future updates, scheduled checks run from the default
+branch; manual dispatch can select the branch that receives the generated lock
+pull request.
 
-One repository setting is required: under **Settings > Actions > General >
-Workflow permissions**, enable **Allow GitHub Actions to create and approve pull
-requests**. Then run **FFmpeg dependency** manually from `stage/vid2dataset2`
-with `base_ref` set to `stage/vid2dataset2`. Review and merge the generated lock
-PR. That merge publishes the dependency prerelease and changes the lock to
-`ready`, after which normal product releases need no FFmpeg setup.
+GitHub Actions must have permission to create pull requests under **Settings >
+Actions > General > Workflow permissions** for automatic dependency update
+pull requests.
 
-Scheduled checks run only from GitHub's default branch. They begin operating
-quarterly after vid2dataset2 is merged into `main`.
+Stable macOS releases require these signing secrets:
 
-Optional macOS signing and notarization secrets:
-
-- `APPLE_ID`
-- `APPLE_PASSWORD`
-- `APPLE_TEAM_ID`
 - `APPLE_CERTIFICATE`
 - `APPLE_CERTIFICATE_PASSWORD`
 - `KEYCHAIN_PASSWORD`
 
-If Apple certificate secrets are absent, macOS alpha builds are produced
-unsigned. Public beta, release candidate, and stable builds should be signed and
-notarized before being marked ready.
+macOS alpha, beta, and release-candidate builds use ad-hoc signatures and do
+not use Apple signing credentials. Stable builds fail before packaging if the
+certificate or identity is unavailable. `APPLE_ID`, `APPLE_PASSWORD`, and
+`APPLE_TEAM_ID` are optional and enable notarization for stable releases.
 
-Optional Windows signing secrets:
+Stable Windows releases require these signing secrets:
 
 - `WINDOWS_CERTIFICATE`
 - `WINDOWS_CERTIFICATE_PASSWORD`
 
-`WINDOWS_CERTIFICATE` is a base64-encoded PFX certificate. When it is absent,
-Windows alpha builds are produced unsigned. When it is present, the release
-workflow signs Windows MSI/EXE bundle artifacts with `signtool` and a SHA-256
-timestamp. Prefer Azure Trusted Signing or another CI-safe signing service for
-stable releases if long-lived PFX material is not acceptable.
+`WINDOWS_CERTIFICATE` is a base64-encoded PFX certificate. Alpha, beta, and
+release-candidate Windows artifacts are unsigned. Stable Windows builds fail
+before packaging if the certificate is unavailable, then sign and verify MSI
+and EXE artifacts with `signtool` and a SHA-256 timestamp.
 
 ## Stage Gates
 
 Alpha proves feature parity with vid2dataset1, bundled FFmpeg packaging, and
 public installability. Alpha releases are GitHub prereleases and may contain
-known issues.
+known issues. macOS alpha builds use ad-hoc signatures; Windows alpha builds
+are unsigned.
 
 Required alpha checks:
 
@@ -212,14 +203,17 @@ Required alpha checks:
 
 Beta is feature freeze. Only fixes, polish, docs, migration cleanup, and
 packaging hardening should land. Add install/uninstall smoke tests and complete
-the manual OS test matrix before beta.
+the manual OS test matrix before beta. Beta macOS builds use ad-hoc signatures;
+Windows beta builds are unsigned.
 
 Release candidates are stable packaging rehearsals. Only blocker fixes should
 land after the first RC. Final release notes and checksums must be ready.
+Release-candidate macOS builds use ad-hoc signatures; Windows builds are
+unsigned.
 
 Stable releases are non-prerelease GitHub Releases produced by the same
-automation. Stable macOS and Windows public artifacts should be signed before
-the release is published.
+automation. Stable macOS and Windows builds must pass signature verification
+before the release can be published.
 
 ## Local Release Commands
 

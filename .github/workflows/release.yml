@@ -26,6 +26,7 @@ jobs:
       source_sha: ${{ steps.request.outputs.source_sha }}
       release_name: ${{ steps.request.outputs.release_name }}
       prerelease: ${{ steps.request.outputs.prerelease }}
+      stable: ${{ steps.request.outputs.stable }}
       draft: ${{ steps.request.outputs.draft }}
     steps:
       - uses: actions/checkout@v4
@@ -103,10 +104,6 @@ jobs:
             os: macos-15
             tauri_args: "--target aarch64-apple-darwin"
             rust_targets: "aarch64-apple-darwin"
-          - name: macos-x64
-            os: macos-15-intel
-            tauri_args: "--target x86_64-apple-darwin"
-            rust_targets: "x86_64-apple-darwin"
           - name: windows-x64
             os: windows-2022
             tauri_args: ""
@@ -146,8 +143,28 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
 
+      - name: Validate stable Windows signing credentials
+        if: runner.os == 'Windows' && needs.prepare.outputs.stable == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE) {
+            Write-Error "WINDOWS_CERTIFICATE is required for stable Windows releases."
+            exit 1
+          }
+          if (-not $env:WINDOWS_CERTIFICATE_PASSWORD) {
+            Write-Error "WINDOWS_CERTIFICATE_PASSWORD is required for stable Windows releases."
+            exit 1
+          }
+
+      - name: Stage release FFmpeg
+        shell: bash
+        run: scripts/stage-release-ffmpeg.sh --target "${{ matrix.name }}"
+
       - name: Import Apple signing certificate
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && needs.prepare.outputs.stable == 'true'
         shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -155,8 +172,8 @@ jobs:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           if [[ -z "${APPLE_CERTIFICATE:-}" ]]; then
-            echo "APPLE_CERTIFICATE is not configured; building unsigned macOS artifacts."
-            exit 0
+            echo "APPLE_CERTIFICATE is required for stable macOS releases." >&2
+            exit 1
           fi
           if [[ -z "${APPLE_CERTIFICATE_PASSWORD:-}" || -z "${KEYCHAIN_PASSWORD:-}" ]]; then
             echo "APPLE_CERTIFICATE_PASSWORD and KEYCHAIN_PASSWORD are required when APPLE_CERTIFICATE is set." >&2
@@ -177,10 +194,6 @@ jobs:
             exit 1
           fi
           echo "APPLE_SIGNING_IDENTITY=$CERT_ID" >> "$GITHUB_ENV"
-
-      - name: Stage release FFmpeg
-        shell: bash
-        run: scripts/stage-release-ffmpeg.sh --target "${{ matrix.name }}"
 
       - name: Sign staged macOS media tools
         if: runner.os == 'macOS'
@@ -213,37 +226,76 @@ jobs:
         working-directory: apps/desktop
         run: |
           if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            # MSI only accepts numeric prerelease identifiers. Keep the app's
-            # SemVer (0.2.0-alpha.3) for other platforms and release metadata.
-            npm run tauri build -- --config '{"version":"0.2.0-3"}'
-          elif [[ -n "${TAURI_ARGS:-}" ]]; then
-            npm run tauri build -- $TAURI_ARGS
+            # MSI only accepts numeric prerelease identifiers.
+            WINDOWS_BUNDLE_VERSION="$(node --input-type=module -e '
+              const match = /^v(\d+)\.(\d+)\.(\d+)(?:-(?:alpha|beta|rc)\.(\d+))?$/i.exec(process.env.RELEASE_TAG ?? "");
+              if (!match) process.exit(1);
+              process.stdout.write(`${match[1]}.${match[2]}.${match[3]}${match[4] ? `-${match[4]}` : ""}`);
+            ')"
+            npm run tauri build -- --config "{\"version\":\"$WINDOWS_BUNDLE_VERSION\"}"
+          elif [[ "${RUNNER_OS}" == "macOS" ]]; then
+            MAC_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
+            if [[ "${RELEASE_STABLE}" == "true" && "$MAC_SIGNING_IDENTITY" == "-" ]]; then
+              echo "Stable macOS releases require an Apple signing identity." >&2
+              exit 1
+            fi
+            MAC_SIGNING_CONFIG="$(MAC_SIGNING_IDENTITY="$MAC_SIGNING_IDENTITY" node -e 'process.stdout.write(JSON.stringify({bundle:{macOS:{signingIdentity:process.env.MAC_SIGNING_IDENTITY}}}))')"
+            if [[ -n "${TAURI_ARGS:-}" ]]; then
+              read -r -a TAURI_ARGUMENTS <<<"$TAURI_ARGS"
+            else
+              TAURI_ARGUMENTS=()
+            fi
+            npm run tauri build -- "${TAURI_ARGUMENTS[@]}" --config "$MAC_SIGNING_CONFIG"
           else
             npm run tauri build
           fi
         env:
           TAURI_ARGS: ${{ matrix.tauri_args }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APPLE_ID: ${{ needs.prepare.outputs.stable == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ needs.prepare.outputs.stable == 'true' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ needs.prepare.outputs.stable == 'true' && secrets.APPLE_TEAM_ID || '' }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_STABLE: ${{ needs.prepare.outputs.stable }}
+
+      - name: Verify macOS application signature
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          RELEASE_STABLE: ${{ needs.prepare.outputs.stable }}
+        run: |
+          APP_ROOTS=()
+          for root in "$GITHUB_WORKSPACE/target/release" "$GITHUB_WORKSPACE/target/aarch64-apple-darwin/release" "$GITHUB_WORKSPACE/apps/desktop/src-tauri/target/release" "$GITHUB_WORKSPACE/apps/desktop/src-tauri/target/aarch64-apple-darwin/release"; do
+            [[ -d "$root" ]] && APP_ROOTS+=("$root")
+          done
+          if [[ "${#APP_ROOTS[@]}" -eq 0 ]]; then
+            echo "No Tauri release directory was found for signature verification." >&2
+            exit 1
+          fi
+          APP_BUNDLES=()
+          while IFS= read -r -d '' app; do
+            APP_BUNDLES+=("$app")
+          done < <(find "${APP_ROOTS[@]}" -type d -path "*/bundle/*.app" -prune -print0)
+          if [[ "${#APP_BUNDLES[@]}" -eq 0 ]]; then
+            echo "No macOS application bundle was found for signature verification." >&2
+            exit 1
+          fi
+          for app in "${APP_BUNDLES[@]}"; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+            DETAILS="$(codesign -dv --verbose=4 "$app" 2>&1)"
+            if [[ "$RELEASE_STABLE" == "true" ]]; then
+              grep -F "Authority=${APPLE_SIGNING_IDENTITY:-}" <<<"$DETAILS" >/dev/null
+            else
+              grep -F "Signature=adhoc" <<<"$DETAILS" >/dev/null
+            fi
+          done
 
       - name: Sign Windows artifacts
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && needs.prepare.outputs.stable == 'true'
         shell: pwsh
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
-          if (-not $env:WINDOWS_CERTIFICATE) {
-            Write-Host "WINDOWS_CERTIFICATE is not configured; building unsigned Windows artifacts."
-            exit 0
-          }
-          if (-not $env:WINDOWS_CERTIFICATE_PASSWORD) {
-            Write-Error "WINDOWS_CERTIFICATE_PASSWORD is required when WINDOWS_CERTIFICATE is set."
-            exit 1
-          }
-
           $certPath = Join-Path $env:RUNNER_TEMP "vid2dataset-signing.pfx"
           [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
 
@@ -263,6 +315,10 @@ jobs:
 
           foreach ($artifact in $artifacts) {
             & $signtool.FullName sign /f $certPath /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $artifact.FullName
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+            & $signtool.FullName verify /pa /all /v $artifact.FullName
             if ($LASTEXITCODE -ne 0) {
               exit $LASTEXITCODE
             }

@@ -9,7 +9,6 @@ OUTPUT_DIR="${4:?output directory is required}"
 
 case "$TARGET" in
   macos-arm64) ARCHITECTURE="aarch64-apple-darwin"; export MACOSX_DEPLOYMENT_TARGET=11.0 ;;
-  macos-x64) ARCHITECTURE="x86_64-apple-darwin"; export MACOSX_DEPLOYMENT_TARGET=10.15 ;;
   windows-x64) ARCHITECTURE="x86_64-pc-windows-gnu" ;;
   linux-x64) ARCHITECTURE="x86_64-unknown-linux-gnu" ;;
   *) echo "unsupported FFmpeg build target: $TARGET" >&2; exit 1 ;;

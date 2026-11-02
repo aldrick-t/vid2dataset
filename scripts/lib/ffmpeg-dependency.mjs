@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 export const LOCK_SCHEMA_VERSION = 1;
-export const TARGETS = ["macos-arm64", "macos-x64", "windows-x64", "linux-x64"];
+export const TARGETS = ["macos-arm64", "windows-x64", "linux-x64"];
 
 const VERSION_PATTERN = /^[0-9]+\.[0-9]+(?:\.[0-9]+)?$/;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;

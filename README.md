@@ -9,8 +9,8 @@ The previous Python/OpenCV/PySide implementation is preserved in [`legacy/`](leg
 
 `vid2dataset` remains the app and binary name. `vid2dataset2` is the Rust +
 Tauri revamp release train. The current revamp milestone is
-`vid2dataset2 Alpha 3`, with machine version `0.2.0-alpha.3` and release tag
-`v0.2.0-alpha.3`.
+`vid2dataset2 Alpha 4`, with machine version `0.2.0-alpha.4` and release tag
+`v0.2.0-alpha.4`.
 
 - Rust workspace scaffolded with `vid2dataset-core` and `vid2dataset` CLI crates.
 - Tauri + React desktop app skeleton with guided and advanced extraction controls.
@@ -40,7 +40,7 @@ Still deferred beyond the current alpha:
 - Hosted web/server backend.
 - COCO/YOLO annotation exports.
 
-The release flow for signed/notarized public installers and automated bundled
+The release flow for platform signing, public installers, and automated bundled
 FFmpeg staging is documented in [`docs/release.md`](docs/release.md).
 
 ## Development Requirements

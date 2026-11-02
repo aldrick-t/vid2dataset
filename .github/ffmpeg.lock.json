@@ -55,14 +55,6 @@
       "ffmpeg_path": "bin/ffmpeg",
       "ffprobe_path": "bin/ffprobe"
     },
-    "macos-x64": {
-      "url": "https://github.com/aldrick-t/vid2dataset/releases/download/ffmpeg-8.1.2-r1/ffmpeg-8.1.2-r1-macos-x64.tar.gz",
-      "sha256": "14c57f5a828c772b420b1d588f5070709cd3d27f5398d4ea4a85d3ab7e33eca3",
-      "archive_format": "tar.gz",
-      "architecture": "x86_64-apple-darwin",
-      "ffmpeg_path": "bin/ffmpeg",
-      "ffprobe_path": "bin/ffprobe"
-    },
     "windows-x64": {
       "url": "https://github.com/aldrick-t/vid2dataset/releases/download/ffmpeg-8.1.2-r1/ffmpeg-8.1.2-r1-windows-x64.tar.gz",
       "sha256": "a87950d9e2505f4aae6b250b6cc59b67ee805e74519b1bd461cd10f5338054e9",

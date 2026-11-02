@@ -40,8 +40,8 @@ This keeps long or high-resolution video processing streaming and avoids loading
 
 ## Release Scope
 
-The current release train is `vid2dataset2 Alpha 3`, version
-`0.2.0-alpha.3`. Release naming, stage gates, signing, GitHub Releases, and
+The current release train is `vid2dataset2 Alpha 4`, version
+`0.2.0-alpha.4`. Release naming, stage gates, signing, GitHub Releases, and
 FFmpeg binary staging are documented in [`release.md`](release.md).
 
 ## Deferred Scope

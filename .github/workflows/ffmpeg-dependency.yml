@@ -103,8 +103,6 @@ jobs:
         include:
           - name: macos-arm64
             os: macos-15
-          - name: macos-x64
-            os: macos-15-intel
           - name: windows-x64
             os: windows-2022
           - name: linux-x64
@@ -259,7 +257,7 @@ jobs:
           - FFmpeg: ${{ needs.resolve.outputs.ffmpeg_version }}
           - zlib: ${{ needs.resolve.outputs.zlib_version }}
           - Dependency release: \`$RELEASE_TAG\`
-          - Targets: macOS ARM64, macOS Intel, Windows x64, Linux x64
+          - Targets: macOS ARM64, Windows x64, Linux x64
 
           Merging this PR promotes the draft dependency release and makes these checksums active for vid2dataset2 packaging.${CLOSES}
           EOF

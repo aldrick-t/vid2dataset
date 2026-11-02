@@ -29,11 +29,17 @@ let draft;
 
 if (sourceEvent === "push") {
   tag = sourceRef;
-  const alphaMatch = /^v\d+\.\d+\.\d+-alpha\.(\d+)$/i.exec(tag);
-  releaseName = alphaMatch
-    ? `vid2dataset2 Alpha ${alphaMatch[1]}`
+  const stageMatch = /^v\d+\.\d+\.\d+-(alpha|beta|rc)\.(\d+)$/i.exec(tag);
+  const releaseStage = stageMatch?.[1].toLowerCase();
+  const stageName = releaseStage === "rc"
+    ? "Release Candidate"
+    : releaseStage
+      ? releaseStage[0].toUpperCase() + releaseStage.slice(1)
+      : null;
+  releaseName = stageMatch
+    ? `vid2dataset2 ${stageName} ${stageMatch[2]}`
     : `vid2dataset2 ${tag}`;
-  prerelease = /alpha|beta|rc/i.test(tag);
+  prerelease = tag.includes("-");
   draft = true;
 } else if (sourceEvent === "workflow_dispatch") {
   if (sourceRef !== defaultBranch) {
@@ -48,14 +54,14 @@ if (sourceEvent === "push") {
   }
   tag = request.tag;
   releaseName = request.releaseName;
-  prerelease = request.prerelease;
+  prerelease = typeof tag === "string" && tag.includes("-");
   draft = request.draft;
 } else {
   fail(`Unsupported release request event: ${sourceEvent}`);
 }
 
-if (typeof tag !== "string" || !/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(tag)) {
-  fail("Release tags must use the vMAJOR.MINOR.PATCH format, with an optional prerelease or build suffix.");
+if (typeof tag !== "string" || !/^v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/i.test(tag)) {
+  fail("Release tags must use vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-{alpha|beta|rc}.N.");
 }
 try {
   git(["check-ref-format", `refs/tags/${tag}`]);
@@ -90,6 +96,10 @@ try {
 } catch {
   fail(`Release tag ${tag} is not reachable from the repository default branch.`);
 }
+const defaultBranchSha = git(["rev-parse", "--verify", `${defaultBranchRef}^{commit}`]);
+if (tagSha !== defaultBranchSha) {
+  fail("New release tags must point to the current default-branch commit.");
+}
 
 if (sourceEvent === "workflow_dispatch") {
   try {
@@ -104,6 +114,7 @@ const outputs = [
   `source_sha=${tagSha}`,
   `release_name=${releaseName}`,
   `prerelease=${prerelease}`,
+  `stable=${!prerelease}`,
   `draft=${draft}`,
 ].join("\n");
 appendFileSync(process.env.GITHUB_OUTPUT, `${outputs}\n`);

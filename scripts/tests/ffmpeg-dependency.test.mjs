@@ -127,11 +127,10 @@ test("source finalization rejects checksum and signing fingerprint failures", ()
   );
 });
 
-test("completed locks require all four immutable target artifacts", () => {
+test("completed locks require all supported immutable target artifacts", () => {
   const candidate = { ...lock, status: "candidate", release: { tag: "ffmpeg-8.1.1-r2", prerelease: true } };
   const manifests = [
     ["macos-arm64", "aarch64-apple-darwin", ""],
-    ["macos-x64", "x86_64-apple-darwin", ""],
     ["windows-x64", "x86_64-pc-windows-gnu", ".exe"],
     ["linux-x64", "x86_64-unknown-linux-gnu", ""],
   ].map(([target, architecture, suffix]) => ({
