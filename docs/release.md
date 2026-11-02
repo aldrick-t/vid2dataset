@@ -6,11 +6,11 @@
 `vid2dataset2` names the Rust + Tauri revamp release train. The legacy Python
 implementation remains under `legacy/` for reference and migration checks.
 
-The current development release is:
+The current prepared release is:
 
-- Product release title: `vid2dataset2 Alpha 2`
-- Machine version: `0.2.0-alpha.2`
-- Git tag: `v0.2.0-alpha.2`
+- Product release title: `vid2dataset2 Alpha 3`
+- Machine version: `0.2.0-alpha.3`
+- Git tag: `v0.2.0-alpha.3`
 
 Use SemVer prerelease identifiers for every public prerelease:
 
@@ -86,15 +86,51 @@ request workflow carries no signing secrets. The release workflow runs from the
 default branch, accepts only commits reachable from that branch, and builds the
 exact commit named by the release tag.
 
-Pushing a `v*` tag starts a release automatically. For a manual release, start
-**Release Request** from the repository default branch and select an existing
-tag reachable from that branch. Manual dispatch from another branch is ignored.
+Pushing a `v*` tag starts the release build automatically and creates a draft
+GitHub Release for review. Do not manually dispatch the same tag after pushing
+it, since the tag push already started a run. Use **Release Request** manually
+from the repository default branch only to retry an existing tag whose earlier
+run did not complete. Manual dispatch from another branch is ignored. The
+selected tag must identify the reviewed current `main` commit for this release;
+the workflow also accepts older reachable commits, so do not select a
+historical tag for a new release.
+
 Manual requests accept:
 
-- `tag`: defaults to `v0.2.0-alpha.2`
-- `release_name`: defaults to `vid2dataset2 Alpha 2`
+- `tag`: defaults to `v0.2.0-alpha.3`
+- `release_name`: defaults to `vid2dataset2 Alpha 3`
 - `prerelease`: defaults to `true`
 - `draft`: defaults to `true`
+
+### Alpha 3 release checklist
+
+1. Merge the Alpha 3 version bump and release notes to `main`, then update the
+   local branch with `git pull --ff-only origin main`. Confirm the worktree is
+   clean and that `main` contains the exact commit you intend to release.
+2. Run the required alpha checks: `cargo fmt --all --check`,
+   `cargo test --workspace --all-targets`, `cargo run -p vid2dataset -- doctor`,
+   and `npm ci && npm run build` from `apps/desktop`.
+3. Create and push the tag on the reviewed `main` commit:
+
+   ```bash
+   git tag -a v0.2.0-alpha.3 -m "vid2dataset2 Alpha 3"
+   git push origin v0.2.0-alpha.3
+   ```
+
+4. The tag push starts **Release Request**, followed by **Release**. Monitor
+   both runs. The release validates
+   the tag, runs workspace/frontend checks, builds macOS ARM64/x64, Windows
+   x64, and Linux x64 packages, and uploads SHA-256 checksums.
+5. Review the draft notes and platform artifacts, verify the checksums, and
+   smoke-test installers on the target operating systems. Publish the draft
+   from GitHub Releases when it is ready.
+
+If the automatic run fails and you need to retry the existing tag, run
+**Release Request** manually on `main` with tag `v0.2.0-alpha.3`, release name
+`vid2dataset2 Alpha 3`, prerelease `true`, and draft `true`.
+
+Alpha 3's FFmpeg dependency lock is already `ready`; the dependency bootstrap
+workflow is not needed for this release.
 
 FFmpeg dependency metadata is committed in `.github/ffmpeg.lock.json`; no
 repository variables are required. A `ready` lock records immutable archive and

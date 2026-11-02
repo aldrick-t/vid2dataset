@@ -29,9 +29,12 @@ let draft;
 
 if (sourceEvent === "push") {
   tag = sourceRef;
-  releaseName = `vid2dataset2 ${tag}`;
+  const alphaMatch = /^v\d+\.\d+\.\d+-alpha\.(\d+)$/i.exec(tag);
+  releaseName = alphaMatch
+    ? `vid2dataset2 Alpha ${alphaMatch[1]}`
+    : `vid2dataset2 ${tag}`;
   prerelease = /alpha|beta|rc/i.test(tag);
-  draft = false;
+  draft = true;
 } else if (sourceEvent === "workflow_dispatch") {
   if (sourceRef !== defaultBranch) {
     fail("Manual release requests must run from the repository default branch.");

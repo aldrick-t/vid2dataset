@@ -1,0 +1,71 @@
+name: Release Request
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to release"
+        required: true
+        default: "v0.2.0-alpha.3"
+      release_name:
+        description: "GitHub release title"
+        required: true
+        default: "vid2dataset2 Alpha 3"
+      prerelease:
+        description: "Mark the GitHub release as a prerelease"
+        type: boolean
+        required: true
+        default: true
+      draft:
+        description: "Create the GitHub release as a draft"
+        type: boolean
+        required: true
+        default: true
+
+permissions: {}
+
+jobs:
+  request:
+    name: Record release request
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Write release metadata
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_RELEASE_NAME: ${{ inputs.release_name }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+          INPUT_DRAFT: ${{ inputs.draft }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+
+          const isManual = process.env.EVENT_NAME === "workflow_dispatch";
+          const tag = isManual ? process.env.INPUT_TAG : process.env.REF_NAME;
+          const alphaMatch = /^v\d+\.\d+\.\d+-alpha\.(\d+)$/i.exec(tag);
+          const metadata = {
+            tag,
+            releaseName: isManual
+              ? process.env.INPUT_RELEASE_NAME
+              : alphaMatch
+                ? `vid2dataset2 Alpha ${alphaMatch[1]}`
+                : `vid2dataset2 ${tag}`,
+            prerelease: isManual
+              ? process.env.INPUT_PRERELEASE === "true"
+              : /alpha|beta|rc/i.test(tag),
+            draft: isManual ? process.env.INPUT_DRAFT === "true" : true,
+          };
+
+          writeFileSync("request.json", JSON.stringify(metadata));
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-request
+          path: request.json
+          if-no-files-found: error

@@ -214,8 +214,8 @@ jobs:
         run: |
           if [[ "${RUNNER_OS}" == "Windows" ]]; then
             # MSI only accepts numeric prerelease identifiers. Keep the app's
-            # SemVer (0.2.0-alpha.2) for other platforms and release metadata.
-            npm run tauri build -- --config '{"version":"0.2.0-2"}'
+            # SemVer (0.2.0-alpha.3) for other platforms and release metadata.
+            npm run tauri build -- --config '{"version":"0.2.0-3"}'
           elif [[ -n "${TAURI_ARGS:-}" ]]; then
             npm run tauri build -- $TAURI_ARGS
           else
@@ -307,4 +307,4 @@ jobs:
           prerelease: ${{ needs.prepare.outputs.prerelease }}
           files: |
             dist/release-artifacts/**/*
-          body_path: docs/release-notes/v0.2.0-alpha.2.md
+          body_path: ${{ format('docs/release-notes/{0}.md', needs.prepare.outputs.tag) }}
