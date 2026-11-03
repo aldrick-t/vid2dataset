@@ -234,6 +234,19 @@ jobs:
             ')"
             npm run tauri build -- --config "{\"version\":\"$WINDOWS_BUNDLE_VERSION\"}"
           elif [[ "${RUNNER_OS}" == "macOS" ]]; then
+            if [[ -n "${APPLE_ID:-}" || -n "${APPLE_PASSWORD:-}" || -n "${APPLE_TEAM_ID:-}" ]]; then
+              if [[ -z "${APPLE_ID:-}" || -z "${APPLE_PASSWORD:-}" || -z "${APPLE_TEAM_ID:-}" ]]; then
+                echo "Set APPLE_ID, APPLE_PASSWORD, and APPLE_TEAM_ID together, or leave all three unset to skip notarization." >&2
+                exit 1
+              fi
+              if [[ "${#APPLE_TEAM_ID}" -lt 3 ]]; then
+                echo "APPLE_TEAM_ID must be at least 3 characters to notarize macOS builds." >&2
+                exit 1
+              fi
+            else
+              unset APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+              echo "Apple notarization credentials are absent; continuing with code signing only."
+            fi
             MAC_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
             if [[ "${RELEASE_STABLE}" == "true" && "$MAC_SIGNING_IDENTITY" == "-" ]]; then
               echo "Stable macOS releases require an Apple signing identity." >&2
@@ -251,9 +264,9 @@ jobs:
           fi
         env:
           TAURI_ARGS: ${{ matrix.tauri_args }}
-          APPLE_ID: ${{ needs.prepare.outputs.stable == 'true' && secrets.APPLE_ID || '' }}
-          APPLE_PASSWORD: ${{ needs.prepare.outputs.stable == 'true' && secrets.APPLE_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ needs.prepare.outputs.stable == 'true' && secrets.APPLE_TEAM_ID || '' }}
+          APPLE_ID: ${{ runner.os == 'macOS' && needs.prepare.outputs.stable == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ runner.os == 'macOS' && needs.prepare.outputs.stable == 'true' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && needs.prepare.outputs.stable == 'true' && secrets.APPLE_TEAM_ID || '' }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           RELEASE_STABLE: ${{ needs.prepare.outputs.stable }}
 

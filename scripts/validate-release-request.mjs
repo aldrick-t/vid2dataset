@@ -97,8 +97,8 @@ try {
   fail(`Release tag ${tag} is not reachable from the repository default branch.`);
 }
 const defaultBranchSha = git(["rev-parse", "--verify", `${defaultBranchRef}^{commit}`]);
-if (tagSha !== defaultBranchSha) {
-  fail("New release tags must point to the current default-branch commit.");
+if (!prerelease && tagSha !== defaultBranchSha) {
+  fail("Stable release tags must point to the current default-branch commit.");
 }
 
 if (sourceEvent === "workflow_dispatch") {

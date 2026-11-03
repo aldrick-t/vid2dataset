@@ -83,15 +83,18 @@ installer portability is validated by confirming `doctor` reports the source as
 Release requests are recorded by `.github/workflows/release-request.yml`; the
 privileged build and publish workflow is `.github/workflows/release.yml`. The
 request workflow carries no signing secrets. The release workflow runs from the
-default branch, accepts only a tag pointing to its current commit, and builds
-that exact commit.
+default branch and builds the exact commit named by the release tag. Stable tags
+must point to the current default-branch commit; prerelease tags may point to
+any commit still reachable from that branch so failed prerelease builds can be
+retried after workflow fixes.
 
 Pushing a `v*` tag starts the release build automatically and creates a draft
 GitHub Release for review. Do not manually dispatch the same tag after pushing
 it, since the tag push already started a run. Use **Release Request** manually
 from the repository default branch only to retry an existing tag whose earlier
-run did not complete. Manual dispatch from another branch is ignored. The
-selected tag must identify the reviewed current default-branch commit for this release.
+run did not complete. Manual dispatch from another branch is ignored.
+For a stable release, the tag must identify the reviewed current default-branch
+commit. Prerelease tags must remain reachable from the default branch.
 
 Manual requests accept:
 
@@ -122,9 +125,9 @@ Manual requests accept:
    smoke-test installers on the target operating systems. Publish the draft
    from GitHub Releases when it is ready.
 
-If the automatic run fails, you can retry while the tag still points to the
-current default-branch commit. Run **Release Request** manually on `main` with
-tag `v0.2.0-alpha.4`, release name `vid2dataset2 Alpha 4`, and draft `true`.
+If the automatic run fails, retry the existing tag by running **Release
+Request** manually on `main` with tag `v0.2.0-alpha.4`, release name
+`vid2dataset2 Alpha 4`, and draft `true`.
 
 Alpha 4's FFmpeg dependency lock is already `ready`; the dependency bootstrap
 workflow is not needed for this release.
@@ -171,8 +174,10 @@ Stable macOS releases require these signing secrets:
 
 macOS alpha, beta, and release-candidate builds use ad-hoc signatures and do
 not use Apple signing credentials. Stable builds fail before packaging if the
-certificate or identity is unavailable. `APPLE_ID`, `APPLE_PASSWORD`, and
-`APPLE_TEAM_ID` are optional and enable notarization for stable releases.
+certificate or identity is unavailable. Notarization is optional: set
+`APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` together for stable builds.
+Leaving all three unset skips notarization; a partial configuration fails with
+a clear error.
 
 Stable Windows releases require these signing secrets:
 
